@@ -527,6 +527,7 @@ async function addAPIKeys(type) {
     renderAPIKeys();
     input.value = '';
     updateKeyCount();
+    autoAdjustSettings();
 
     // Summary toast
     const parts = [];
@@ -545,6 +546,7 @@ async function removeAPIKey(type, index) {
     await saveSettings();
     renderAPIKeys();
     updateKeyCount();
+    autoAdjustSettings();
     showToast('info', 'API key removed');
 }
 
@@ -1098,11 +1100,47 @@ function updateSpeedCalc() {
 }
 
 function applyRecommendedSettings(chunk, workers) {
-    document.getElementById('settingChunkDuration').value = chunk;
-    document.getElementById('settingMaxWorkers').value = workers;
+    const chunkInput = document.getElementById('settingChunkDuration');
+    const workersInput = document.getElementById('settingMaxWorkers');
+
+    if (chunkInput) chunkInput.value = chunk;
+    if (workersInput) workersInput.value = workers;
+
     updateSetting('chunk_duration_minutes', chunk);
     updateSetting('max_parallel_workers', workers);
     showToast('success', 'Applied: ' + chunk + ' min chunks, ' + workers + ' workers');
+}
+
+function autoAdjustSettings() {
+    const totalKeys = (AppState.settings.paid_api_keys?.length || 0) + (AppState.settings.free_api_keys?.length || 0);
+    if (totalKeys === 0) return;
+
+    let recChunk, recWorkers;
+    if (totalKeys <= 1) {
+        recChunk = 10; recWorkers = 1;
+    } else if (totalKeys <= 3) {
+        recChunk = 10; recWorkers = totalKeys;
+    } else if (totalKeys <= 10) {
+        recChunk = 5; recWorkers = totalKeys;
+    } else {
+        recChunk = 3; recWorkers = Math.min(totalKeys, 20);
+    }
+
+    const chunkInput = document.getElementById('settingChunkDuration');
+    const workersInput = document.getElementById('settingMaxWorkers');
+
+    // Fall back to server settings update if UI elements aren't rendered yet
+    if (chunkInput) chunkInput.value = recChunk;
+    if (workersInput) workersInput.value = recWorkers;
+
+    updateSetting('chunk_duration_minutes', recChunk);
+    updateSetting('max_parallel_workers', recWorkers);
+
+    setTimeout(() => {
+        showToast('info', `⚡ Auto-adjusted: ${recWorkers} workers, ${recChunk}m chunks`);
+    }, 1500); // Show slightly after the main added/removed toast
+
+    updateSpeedCalc();
 }
 
 // Run speed calc when settings load
