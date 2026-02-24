@@ -291,8 +291,16 @@ class TranscriptionEngine:
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"📥 Downloading audio from URL..."})
         output_path = TEMP_DIR / f"{job_id}.mp3"
         try:
-            cmd = [
-                sys.executable, "-m", "yt_dlp",
+            is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
+            ytdlp_engine = str(BASE_DIR / "ytdlp_bypass.py") if is_cloud else "-m"
+            
+            cmd = [sys.executable]
+            if is_cloud:
+                cmd.append(ytdlp_engine)
+            else:
+                cmd.extend(["-m", "yt_dlp"])
+                
+            cmd.extend([
                 "--no-check-certificates",
                 "-x", "--audio-format", "mp3",
                 "--audio-quality", "128K",
@@ -305,7 +313,7 @@ class TranscriptionEngine:
                 "--remote-components", "ejs:github", # Required by new YouTube bot-solver
                 "-o", str(TEMP_DIR / f"{job_id}.%(ext)s"),
                 url
-            ]
+            ])
             if FFMPEG_PATH:
                 cmd.extend(["--ffmpeg-location", str(Path(FFMPEG_PATH).parent)])
             
