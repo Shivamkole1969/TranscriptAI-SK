@@ -990,8 +990,9 @@ if __name__ == "__main__":
             )
             server_thread.start()
             time.sleep(1)
+            icon_path = str(BASE_DIR / "static" / "logo.png")
             webview.create_window("AI Transcriptor by Shivam Kole", f"http://127.0.0.1:{port}", width=1400, height=900)
-            webview.start()
+            webview.start(icon=icon_path)
         except ImportError:
             logger.info("pywebview not available, opening in browser...")
             threading.Thread(target=open_browser, daemon=True).start()

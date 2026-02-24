@@ -53,7 +53,7 @@ pyinstaller ^
     --hidden-import "aiofiles" ^
     --hidden-import "multipart" ^
     --hidden-import "websockets" ^
-    --icon "NONE" ^
+    --icon "icon.ico" ^
     main.py
 
 echo [4/4] Copying additional files...
