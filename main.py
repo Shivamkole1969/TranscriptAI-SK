@@ -294,6 +294,7 @@ class TranscriptionEngine:
                 "--audio-quality", "128K",
                 "--no-playlist",
                 "--socket-timeout", "30",
+                "--js-runtimes", "nodejs,deno",
                 "-o", str(TEMP_DIR / f"{job_id}.%(ext)s"),
                 url
             ]
