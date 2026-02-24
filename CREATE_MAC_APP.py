@@ -19,10 +19,16 @@ res_dir = app_dir / "Contents" / "Resources"
 macos_dir.mkdir(parents=True, exist_ok=True)
 res_dir.mkdir(parents=True, exist_ok=True)
 
-# Copy icon
-icon_src = src_dir / "icon.icns"
-if icon_src.exists():
-    shutil.copy(icon_src, res_dir / "icon.icns")
+# Generate and copy icon
+try:
+    from PIL import Image
+    logo_path = src_dir / "static" / "logo.png"
+    icns_path = res_dir / "icon.icns"
+    if logo_path.exists():
+        img = Image.open(logo_path)
+        img.save(icns_path, format="ICNS")
+except ImportError:
+    print("⚠️ PIL not installed, skipping Mac icon generation. Run 'pip install Pillow' to get the icon.")
 
 # Write Info.plist
 info_plist = app_dir / "Contents" / "Info.plist"
