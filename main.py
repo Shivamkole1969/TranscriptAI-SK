@@ -95,7 +95,11 @@ APP_DATA_DIR = get_app_data_dir()
 SETTINGS_FILE = APP_DATA_DIR / "api_settings.json"
 HISTORY_FILE = APP_DATA_DIR / "history.json"
 SCHEDULE_FILE = APP_DATA_DIR / "schedules.json"
-OUTPUT_DIR = APP_DATA_DIR / "Transcripted"
+
+# Put downloads in the user's actual Downloads folder for easy access
+DOWNLOADS_BASE = Path(os.path.expanduser('~')) / "Downloads"
+OUTPUT_DIR = DOWNLOADS_BASE / "AITranscriptor"
+
 MP3_DIR = APP_DATA_DIR / "Mp3"
 TEMP_DIR = APP_DATA_DIR / "temp"
 
