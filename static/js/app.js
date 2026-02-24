@@ -644,13 +644,16 @@ async function loadSettings() {
                 const TWELVE_HOURS = 12 * 60 * 60 * 1000;
 
                 if (Date.now() - cache.timestamp <= TWELVE_HOURS) {
-                    // Cache is valid, merge keys that aren't already string on server
-                    if (cache.paid.length > 0 && (!serverSettings.paid_api_keys || serverSettings.paid_api_keys.length === 0)) {
-                        serverSettings.paid_api_keys = cache.paid;
+                    // Cache is valid. Forcefully restore these keys, merging with any existing backend keys
+                    const currentPaid = serverSettings.paid_api_keys || [];
+                    const currentFree = serverSettings.free_api_keys || [];
+
+                    if (cache.paid && cache.paid.length > 0) {
+                        serverSettings.paid_api_keys = Array.from(new Set([...currentPaid, ...cache.paid]));
                         shouldSaveSettings = true;
                     }
-                    if (cache.free.length > 0 && (!serverSettings.free_api_keys || serverSettings.free_api_keys.length === 0)) {
-                        serverSettings.free_api_keys = cache.free;
+                    if (cache.free && cache.free.length > 0) {
+                        serverSettings.free_api_keys = Array.from(new Set([...currentFree, ...cache.free]));
                         shouldSaveSettings = true;
                     }
                 } else {
