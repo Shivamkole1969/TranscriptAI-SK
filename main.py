@@ -297,6 +297,9 @@ class TranscriptionEngine:
                 "-x", "--audio-format", "mp3",
                 "--audio-quality", "128K",
                 "--no-playlist",
+                "--force-ipv4",         # Fixes DNS/VPN networking errors ([Errno -5])
+                "--geo-bypass",         # Auto-bypasses basic regional restrictions
+                "--add-header", "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", # Bypasses basic bot checks
                 "--socket-timeout", "30",
                 "--js-runtimes", "nodejs,deno",
                 "-o", str(TEMP_DIR / f"{job_id}.%(ext)s"),
