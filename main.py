@@ -342,10 +342,12 @@ class TranscriptionEngine:
                 error_hint = " This video appears to be private or restricted."
             elif "unavailable" in stderr_lower or "not available" in stderr_lower:
                 error_hint = " This video is unavailable in this region or has been removed."
-            elif "sign in" in stderr_lower or "age" in stderr_lower:
+            elif "sign in" in stderr_lower or "age restrict" in stderr_lower or "verify your age" in stderr_lower:
                 error_hint = " This video requires sign-in or age verification."
             elif "no supported javascript" in stderr_lower or "js runtime" in stderr_lower:
                 error_hint = " yt-dlp needs a JavaScript runtime (Node.js). Server may need updating."
+            elif "no address associated with hostname" in stderr_lower or "name or service not known" in stderr_lower or "network is unreachable" in stderr_lower:
+                error_hint = " Network error: Could not reach YouTube. Check your internet connection or DNS."
             
             # Show last line of stderr for debugging
             last_err = stderr_text.split('\n')[-1][:150] if stderr_text else "No output from yt-dlp"

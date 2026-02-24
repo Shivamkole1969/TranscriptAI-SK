@@ -50,9 +50,12 @@ info_plist.write_text('''<?xml version="1.0" encoding="UTF-8"?>
 </plist>''')
 
 # Write run script (background runner snippet)
+import sys
+python_bin = sys.executable
+
 run_script = macos_dir / "run"
 run_script_sh = f'''#!/bin/bash
-DIR="/Users/shivam.kole/Downloads/Transcriptor SK"
+DIR="{src_dir}"
 cd "$DIR"
 
 # Check if application is already running on port 8765
@@ -61,7 +64,7 @@ if lsof -Pi :8765 -sTCP:LISTEN -t >/dev/null ; then
     open "http://127.0.0.1:8765"
 else
     # Start it up and let webview handle the browser
-    /opt/homebrew/bin/python3 main.py
+    "{python_bin}" main.py
 fi
 '''
 run_script.write_text(run_script_sh)
