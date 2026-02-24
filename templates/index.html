@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="AI Transcriptor by Shivam Kole - Enterprise-grade audio transcription with speaker detection, MP3 tools, and multi-API parallelism.">
+    <title>AI Transcriptor — by Shivam Kole</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
+</head>
+
+<body>
+    <!-- 3D Animated Background (Canvas) -->
+    <script src="/static/js/background.js"></script>
+
+    <div class="app-container">
+        <!-- ═══ Navbar ═══ -->
+        <nav class="navbar">
+            <a href="/" class="nav-brand">
+                <span class="nav-brand-name">AI Transcriptor</span>
+                <span class="nav-brand-author">by Shivam Kole</span>
+            </a>
+
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="transcription">
+                    <span class="tab-icon">🎙️</span> Transcription
+                </button>
+                <button class="nav-tab" data-tab="mp3tools">
+                    <span class="tab-icon">🎵</span> MP3 Tools
+                </button>
+                <button class="nav-tab" data-tab="scheduler">
+                    <span class="tab-icon">📅</span> Scheduler
+                </button>
+                <button class="nav-tab" data-tab="settings">
+                    <span class="tab-icon">🔑</span> API Keys
+                </button>
+            </div>
+
+            <div class="nav-status">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()"
+                    title="Toggle Light/Dark Mode">🌙</button>
+                <div class="status-dot" id="statusDot"></div>
+                <span class="status-text" id="statusText">Connecting...</span>
+                <span class="key-count" id="keyCount">🔑 0 keys</span>
+            </div>
+        </nav>
+
+        <!-- ═══ Main Content ═══ -->
+        <main class="main-content">
+
+            <!-- ╔══ SECTION 1: Transcription ══╗ -->
+            <section class="page-section active" id="section-transcription">
+                <div class="transcription-layout">
+                    <!-- Left: Input -->
+                    <div class="input-section">
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h1 class="card-title"><span class="icon">🎯</span> New Transcription</h1>
+                                    <p class="card-subtitle">100% word-for-word accuracy with speaker detection</p>
+                                </div>
+                            </div>
+
+                            <!-- Input Method Tabs -->
+                            <div class="input-methods">
+                                <button class="input-method-btn active" data-method="url">🔗 URL / Link</button>
+                                <button class="input-method-btn" data-method="upload">📤 Upload File</button>
+                            </div>
+
+                            <!-- URL Input Panel -->
+                            <div class="input-panel active" id="panel-url">
+                                <form id="urlForm">
+                                    <div class="form-group">
+                                        <label class="form-label">Meeting / Video URL</label>
+                                        <input class="form-input" type="text" id="inputUrl"
+                                            placeholder="https://youtube.com/watch?v=... or any video URL"
+                                            autocomplete="off">
+                                        <p class="form-hint">Supports YouTube, Vimeo, direct MP3/MP4 links, ON24, Teams
+                                            recordings, etc.</p>
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">Company / Meeting Name</label>
+                                        <input class="form-input" type="text" id="inputCompany"
+                                            placeholder="e.g., HDFC Bank Q3 FY25 Earnings Call" autocomplete="off">
+                                    </div>
+                                    <button type="submit" class="btn btn-primary btn-lg w-full">
+                                        🎯 Start Transcription
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Upload Panel -->
+                            <div class="input-panel" id="panel-upload">
+                                <div class="form-group">
+                                    <label class="form-label">Company / Meeting Name</label>
+                                    <input class="form-input" type="text" id="uploadCompany"
+                                        placeholder="e.g., Reliance Industries AGM" autocomplete="off">
+                                </div>
+                                <div class="upload-area" id="uploadArea">
+                                    <div class="upload-icon">📁</div>
+                                    <div class="upload-text">Drop audio/video files here or <strong>click to
+                                            browse</strong></div>
+                                    <div class="upload-hint">Supports MP3, WAV, M4A, MP4, WebM, OGG, FLAC</div>
+                                    <input type="file" id="fileInput" multiple
+                                        accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.flac,.aac" hidden>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Process Display -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h2 class="card-title"><span class="icon">🖥️</span> Live Process</h2>
+                                <button class="btn btn-sm btn-secondary"
+                                    onclick="document.getElementById('processDisplay').innerHTML=''">Clear</button>
+                            </div>
+                            <div class="process-display" id="processDisplay">
+                                <div class="process-line info">[System] Ready. Add API keys and start transcribing.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h2 class="card-title"><span class="icon">📜</span> History</h2>
+                                <button class="btn btn-sm btn-danger" onclick="clearHistory()">🗑️ Clear</button>
+                            </div>
+                            <div style="overflow-x: auto;">
+                                <table class="history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Meeting</th>
+                                            <th>Date</th>
+                                            <th>Words</th>
+                                            <th>Time</th>
+                                            <th>Status</th>
+                                            <th>Files</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center"
+                                                style="padding: 40px; color: var(--text-muted);">
+                                                No transcription history yet. Start your first transcription!
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- System Info -->
+                        <div class="card mt-4">
+                            <div class="card-header">
+                                <h2 class="card-title"><span class="icon">⚙️</span> System</h2>
+                            </div>
+                            <div id="systemInfo">
+                                <div class="grid-4">
+                                    <div class="stat-card">
+                                        <div class="stat-value">—</div>
+                                        <div class="stat-label">API Keys</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-value">—</div>
+                                        <div class="stat-label">Transcriptions</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-value">—</div>
+                                        <div class="stat-label">FFmpeg</div>
+                                    </div>
+                                    <div class="stat-card">
+                                        <div class="stat-value">—</div>
+                                        <div class="stat-label">SSL Cert</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Queue -->
+                    <div class="queue-panel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h2 class="card-title"><span class="icon">📋</span> Active Queue</h2>
+                            </div>
+                            <div class="queue-list" id="queueList">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">🎧</div>
+                                    <div class="empty-state-text">No active jobs</div>
+                                    <div class="empty-state-hint">Submit a URL or upload a file to start</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ╔══ SECTION 2: MP3 Tools ══╗ -->
+            <section class="page-section" id="section-mp3tools">
+                <div class="card mb-6">
+                    <div class="card-header">
+                        <div>
+                            <h1 class="card-title"><span class="icon">🎵</span> MP3 Studio</h1>
+                            <p class="card-subtitle">Compress, merge, split, and convert audio files</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tool-grid">
+                    <!-- Compress -->
+                    <div class="tool-card">
+                        <div class="tool-icon compress">🗜️</div>
+                        <h3 class="tool-name">Compress MP3</h3>
+                        <p class="tool-desc">Reduce file size by adjusting bitrate. Convert 320kbps to 128kbps for ~75%
+                            size reduction.</p>
+                        <form id="compressForm">
+                            <div class="form-group">
+                                <input type="file" class="form-input" id="compressFile" accept=".mp3,.wav,.m4a,.mp4">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Target Bitrate</label>
+                                <select class="form-select" id="compressBitrate">
+                                    <option value="64k">64 kbps (Smallest)</option>
+                                    <option value="96k">96 kbps</option>
+                                    <option value="128k" selected>128 kbps (Recommended)</option>
+                                    <option value="192k">192 kbps</option>
+                                    <option value="256k">256 kbps</option>
+                                    <option value="320k">320 kbps (Best Quality)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-full">🗜️ Compress</button>
+                        </form>
+                        <div id="compressResult"></div>
+                    </div>
+
+                    <!-- Merge -->
+                    <div class="tool-card">
+                        <div class="tool-icon merge">🔗</div>
+                        <h3 class="tool-name">Merge Files</h3>
+                        <p class="tool-desc">Combine multiple audio files into one continuous file. Great for split
+                            recordings.</p>
+                        <form id="mergeForm">
+                            <div class="form-group">
+                                <input type="file" class="form-input" id="mergeFiles" accept=".mp3,.wav,.m4a" multiple>
+                                <p class="form-hint">Select 2 or more files to merge</p>
+                            </div>
+                            <button type="submit" class="btn btn-success w-full">🔗 Merge Files</button>
+                        </form>
+                    </div>
+
+                    <!-- Split -->
+                    <div class="tool-card">
+                        <div class="tool-icon split">✂️</div>
+                        <h3 class="tool-name">Split Audio</h3>
+                        <p class="tool-desc">Split a long recording into equal-length segments for easier processing.
+                        </p>
+                        <form id="splitForm">
+                            <div class="form-group">
+                                <input type="file" class="form-input" id="splitFile" accept=".mp3,.wav,.m4a">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Segment Duration (minutes)</label>
+                                <input type="number" class="form-input" id="splitMinutes" value="10" min="1" max="60">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-full">✂️ Split File</button>
+                        </form>
+                    </div>
+
+                    <!-- Convert -->
+                    <div class="tool-card">
+                        <div class="tool-icon convert">🔄</div>
+                        <h3 class="tool-name">Convert to MP3</h3>
+                        <p class="tool-desc">Convert any audio/video format to MP3. Supports MP4, WebM, WAV, M4A, FLAC,
+                            OGG.</p>
+                        <form id="convertForm">
+                            <div class="form-group">
+                                <input type="file" class="form-input" id="convertFile"
+                                    accept="audio/*,video/*,.mp4,.webm,.mkv,.avi,.flac,.ogg,.aac">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Output Bitrate</label>
+                                <select class="form-select" id="convertBitrate">
+                                    <option value="128k" selected>128 kbps</option>
+                                    <option value="192k">192 kbps</option>
+                                    <option value="320k">320 kbps</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-full">🔄 Convert to MP3</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- MP3 Tips -->
+                <div class="card mt-6">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">💡</span> Pro Tips</h2>
+                    </div>
+                    <div class="grid-3">
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">📐 Size Guide</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                100 min video → 128kbps MP3 ≈ 25 MB<br>
+                                320kbps → 128kbps = ~60% smaller<br>
+                                128kbps = Perfect for speech
+                            </p>
+                        </div>
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">🎯 Best For Meetings</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                128kbps is ideal for speech<br>
+                                Mono channel saves 50% size<br>
+                                Human speech: 200-8000 Hz
+                            </p>
+                        </div>
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">🔧 ON24 / Teams</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                ON24: Download MPD → Convert<br>
+                                Teams: Download recording → Upload<br>
+                                Webex: Export MP4 → Convert here
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ╔══ SECTION 3: Scheduler ══╗ -->
+            <section class="page-section" id="section-scheduler">
+                <div class="grid-2">
+                    <!-- Add Schedule -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h1 class="card-title"><span class="icon">📅</span> Schedule Transcription</h1>
+                        </div>
+                        <form id="scheduleForm">
+                            <div class="form-group">
+                                <label class="form-label">Meeting URL</label>
+                                <input class="form-input" type="text" id="scheduleUrl" placeholder="https://..."
+                                    required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Company / Meeting Name</label>
+                                <input class="form-input" type="text" id="scheduleCompany"
+                                    placeholder="e.g., TCS Q3 Call" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Schedule Date & Time</label>
+                                <input class="form-input" type="datetime-local" id="scheduleDatetime" required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Repeat</label>
+                                <select class="form-select" id="scheduleRepeat">
+                                    <option value="none">One-time</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-full">📅 Add Schedule</button>
+                        </form>
+                    </div>
+
+                    <!-- Schedule List -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title"><span class="icon">📋</span> Scheduled Tasks</h2>
+                        </div>
+                        <div id="scheduleList">
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📅</div>
+                                <div class="empty-state-text">No scheduled tasks</div>
+                                <div class="empty-state-hint">Add a schedule to automate your transcriptions</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scheduler info -->
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">ℹ️</span> How Scheduling Works</h2>
+                    </div>
+                    <div class="grid-3">
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">1️⃣ Set It Up</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                Add the meeting URL and set the time when you want the transcription to start
+                                automatically.
+                            </p>
+                        </div>
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">2️⃣ Auto Process</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                At the scheduled time, the app automatically downloads, processes, and transcribes the
+                                audio.
+                            </p>
+                        </div>
+                        <div style="padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 8px;">3️⃣ Get Results</h4>
+                            <p style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                                PDF and TXT transcripts are saved to your output folder. View them in History tab.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ╔══ SECTION 4: API Keys / Settings ══╗ -->
+            <section class="page-section" id="section-settings">
+                <!-- API Keys -->
+                <div class="api-section-grid">
+                    <!-- Paid Keys -->
+                    <div class="key-group">
+                        <div class="key-group-title">
+                            <span>💳 Paid API Keys</span>
+                            <span class="key-badge paid">Premium</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+                            Paid API keys have higher rate limits and faster processing. Recommended for heavy use.
+                            These keys are tried first for transcription.
+                        </p>
+                        <ul class="key-list" id="paidKeysList">
+                            <div class="empty-state">
+                                <div class="empty-state-text">No paid keys added</div>
+                            </div>
+                        </ul>
+                        <div class="key-add-row" style="flex-direction: column;">
+                            <textarea class="form-textarea" id="paidKeyInput" rows="2"
+                                placeholder="Paste one or more API keys (one per line, or comma-separated)&#10;gsk_abc123..., gsk_def456..."
+                                style="font-family: 'JetBrains Mono', monospace; font-size: 12px; min-height: 52px;"></textarea>
+                            <button class="btn btn-primary" id="addPaidKey" style="align-self: flex-end;">+ Add
+                                Key(s)</button>
+                        </div>
+                    </div>
+
+                    <!-- Free / Groq Keys -->
+                    <div class="key-group">
+                        <div class="key-group-title">
+                            <span>🆓 Free / Groq API Keys</span>
+                            <span class="key-badge free">Free Tier</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
+                            Add multiple free Groq keys to increase parallel capacity. The app dynamically distributes
+                            load
+                            across all keys using round-robin. More keys = faster transcription!
+                        </p>
+                        <ul class="key-list" id="freeKeysList">
+                            <div class="empty-state">
+                                <div class="empty-state-text">No free/Groq keys added</div>
+                            </div>
+                        </ul>
+                        <div class="key-add-row" style="flex-direction: column;">
+                            <textarea class="form-textarea" id="freeKeyInput" rows="3"
+                                placeholder="Paste multiple free Groq keys here — one per line or comma-separated&#10;gsk_key1..., gsk_key2..., gsk_key3...&#10;Supports bulk paste of 10+ keys at once!"
+                                style="font-family: 'JetBrains Mono', monospace; font-size: 12px; min-height: 68px;"></textarea>
+                            <button class="btn btn-success" id="addFreeKey" style="align-self: flex-end;">+ Add
+                                Key(s)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced Settings -->
+                <div class="card mt-6">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">⚙️</span> Advanced Settings</h2>
+                    </div>
+                    <div class="grid-4">
+                        <div class="form-group">
+                            <label class="form-label">Chunk Duration (minutes)</label>
+                            <input class="form-input" type="number" id="settingChunkDuration" value="10" min="1"
+                                max="30" onchange="updateSetting('chunk_duration_minutes', parseInt(this.value))">
+                            <p class="form-hint">Shorter chunks = more parallelism. 10 min recommended.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Max Parallel Workers</label>
+                            <input class="form-input" type="number" id="settingMaxWorkers" value="20" min="1" max="50"
+                                onchange="updateSetting('max_parallel_workers', parseInt(this.value))">
+                            <p class="form-hint">Higher = faster but more API usage. Default: 20</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Whisper Model</label>
+                            <select class="form-select" id="settingModel"
+                                onchange="updateSetting('default_model', this.value)">
+                                <option value="whisper-large-v3" selected>Whisper Large V3 (Best)</option>
+                                <option value="whisper-large-v3-turbo">Whisper Large V3 Turbo</option>
+                                <option value="distil-whisper-large-v3-en">Distil Whisper (Fast)</option>
+                            </select>
+                            <p class="form-hint">Large V3 = best accuracy. Turbo = faster.</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">English Dialect</label>
+                            <select class="form-select" id="settingDialect"
+                                onchange="updateSetting('english_dialect', this.value)">
+                                <option value="indian" selected>🇮🇳 Indian English</option>
+                                <option value="american">🇺🇸 American English</option>
+                                <option value="british">🇬🇧 British English</option>
+                                <option value="australian">🇦🇺 Australian English</option>
+                                <option value="mixed">🌍 Mixed (Multi-accent)</option>
+                                <option value="auto">🤖 Auto-Detect</option>
+                            </select>
+                            <p class="form-hint">Helps Whisper adapt to accent-specific pronunciations.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Speed Calculator / Recommendation Guide -->
+                <div class="card mt-6" id="speedCalcCard">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">⚡</span> Speed Calculator &amp; Recommendations</h2>
+                    </div>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                        Enter your meeting duration and see recommended settings based on your API key count.
+                    </p>
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label class="form-label">Meeting Duration (minutes)</label>
+                            <input class="form-input" type="number" id="calcMeetingDuration" value="60" min="5"
+                                max="300" oninput="updateSpeedCalc()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Your Free API Keys</label>
+                            <div class="form-input" id="calcKeyCount"
+                                style="background: var(--bg-elevated); font-weight: 600; cursor: default;">
+                                0 keys
+                            </div>
+                            <p class="form-hint">Auto-detected from your saved keys</p>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Key Type</label>
+                            <select class="form-select" id="calcKeyType" onchange="updateSpeedCalc()">
+                                <option value="free" selected>Free Groq Keys</option>
+                                <option value="paid">Paid Keys (10x faster)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="speedCalcResult" style="margin-top: 16px;">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="card mt-6">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">📖</span> How to Get API Keys</h2>
+                    </div>
+                    <div class="grid-2">
+                        <div style="padding: 20px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 12px;">🆓 Free Groq Keys</h4>
+                            <ol style="font-size: 13px; color: var(--text-muted); line-height: 2; padding-left: 20px;">
+                                <li>Go to <strong>console.groq.com</strong></li>
+                                <li>Sign up with Google or GitHub (free)</li>
+                                <li>Click <strong>"API Keys"</strong> in the sidebar</li>
+                                <li>Click <strong>"Create API Key"</strong></li>
+                                <li>Copy the key starting with <code>gsk_</code></li>
+                                <li>Paste it here — Done!</li>
+                            </ol>
+                            <p style="font-size: 12px; color: var(--info); margin-top: 12px;">
+                                💡 Tip: Create multiple accounts with different emails for more keys. Each key gets
+                                ~14,400 seconds/day free.
+                            </p>
+                        </div>
+                        <div style="padding: 20px; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                            <h4 style="color: var(--text-primary); margin-bottom: 12px;">💳 Paid Keys / Custom LLM</h4>
+                            <ol style="font-size: 13px; color: var(--text-muted); line-height: 2; padding-left: 20px;">
+                                <li>Go to <strong>console.groq.com/settings/billing</strong></li>
+                                <li>Add a payment method</li>
+                                <li>Subscribe to a plan</li>
+                                <li>Create a new API key</li>
+                                <li>Add it in the <strong>"Paid API Keys"</strong> section</li>
+                            </ol>
+                            <p style="font-size: 12px; color: var(--warning); margin-top: 12px;">
+                                ⚡ Paid keys get 10x higher rate limits. One paid key often matches 10+ free keys.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feedback -->
+                <div class="card mt-6">
+                    <div class="card-header">
+                        <h2 class="card-title"><span class="icon">💬</span> Feedback & Support</h2>
+                    </div>
+                    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
+                        Have suggestions, found a bug, or need help? Send your feedback to
+                        <a href="mailto:shivamkole1234@gmail.com"
+                            style="color: var(--accent-primary);">shivamkole1234@gmail.com</a>
+                    </p>
+                    <form id="feedbackForm">
+                        <div class="form-group">
+                            <textarea class="form-textarea" id="feedbackMessage" rows="3"
+                                placeholder="Type your feedback, suggestion, or bug report here..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">📨 Send Feedback</button>
+                    </form>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ═══ Error Console (Bottom Bar) ═══ -->
+    <div class="error-console collapsed" id="errorConsole">
+        <div class="error-console-header" id="errorConsoleToggle">
+            <span class="error-console-title">
+                ⚠️ Console
+                <span class="error-badge" id="errorBadge" style="display:none;">0</span>
+            </span>
+            <span style="font-size: 12px; color: var(--text-muted);">▲ Click to expand</span>
+        </div>
+        <div class="error-console-body" id="errorBody">
+            <div style="color: var(--text-muted); font-size: 12px; text-align: center; padding: 20px;">
+                No errors. All systems running smoothly. ✅
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Toast Container ═══ -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ═══ Scripts ═══ -->
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>

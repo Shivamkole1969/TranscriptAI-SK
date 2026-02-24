@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+venv/
+.venv/
+env/
+
+# Output files
+output/
+*.mp3
+*.wav
+*.mp4
+*.m4a
+*.webm
+*.flac
+*.ogg
+
+# OS generated
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Settings (user-specific)
+settings.json
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+*.exe
+*.app
+*.dmg
+*.msi
+*.spec
+
+# Corporate cert (DO include — needed for corporate environments)
+# custom_bundle.pem
+
+# Node modules (for web-app)
+web-app/node_modules/
+
+# Gemini workspace
+.gemini/

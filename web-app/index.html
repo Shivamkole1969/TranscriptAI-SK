@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="TranscriptAI SK — Enterprise-grade AI transcription by Shivam Kole. 100% accurate, blazing fast, speaker-detected meeting transcriptions powered by Groq Whisper.">
+    <meta name="keywords"
+        content="AI transcription, meeting transcription, Groq Whisper, speaker detection, corporate meetings, audio transcription, Shivam Kole">
+    <meta name="author" content="Shivam Kole">
+    <meta property="og:title" content="TranscriptAI SK — AI Meeting Transcription">
+    <meta property="og:description"
+        content="Enterprise-grade AI meeting transcription with speaker detection, MP3 tools, and multi-API parallelism.">
+    <meta property="og:type" content="website">
+    <title>TranscriptAI SK — AI Meeting Transcription by Shivam Kole</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ═══ CSS Variables ═══ */
+        :root {
+            --bg-deep: #020617;
+            --bg-primary: #0a0e1a;
+            --bg-card: rgba(15, 23, 42, 0.7);
+            --bg-card-solid: #0f172a;
+            --bg-glass: rgba(15, 23, 42, 0.5);
+            --accent: #3b82f6;
+            --accent-2: #6366f1;
+            --accent-3: #8b5cf6;
+            --accent-4: #a855f7;
+            --cyan: #06b6d4;
+            --emerald: #10b981;
+            --amber: #f59e0b;
+            --rose: #f43f5e;
+            --text-1: #f1f5f9;
+            --text-2: #94a3b8;
+            --text-3: #64748b;
+            --border: rgba(148, 163, 184, 0.08);
+            --glow: rgba(59, 130, 246, 0.4);
+        }
+
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-deep);
+            color: var(--text-1);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ═══ Canvas Background ═══ */
+        #bgCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ═══ Navbar ═══ */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(2, 6, 23, 0.8);
+            backdrop-filter: blur(20px) saturate(180%);
+            border-bottom: 1px solid var(--border);
+            padding: 0 40px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-brand {
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            text-decoration: none;
+        }
+
+        .nav-logo {
+            font-size: 24px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6, #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-author {
+            font-size: 12px;
+            color: var(--text-3);
+            font-weight: 400;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-2);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-1);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-3));
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+
+        .nav-links a:hover::after {
+            transform: scaleX(1);
+        }
+
+        .nav-cta {
+            padding: 8px 24px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff !important;
+            border-radius: 8px;
+            font-weight: 600;
+            box-shadow: 0 2px 15px var(--glow);
+            transition: all 0.3s !important;
+        }
+
+        .nav-cta:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 25px var(--glow) !important;
+        }
+
+        .nav-cta::after {
+            display: none !important;
+        }
+
+        /* ═══ Hero Section ═══ */
+        .hero {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 40px 80px;
+        }
+
+        .hero-content {
+            max-width: 900px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--accent);
+            margin-bottom: 32px;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        .hero-title {
+            font-size: clamp(42px, 6vw, 72px);
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            letter-spacing: -2px;
+            animation: fadeInUp 0.8s ease 0.1s both;
+        }
+
+        .hero-title .gradient-text {
+            background: linear-gradient(135deg, #3b82f6 0%, #6366f1 30%, #8b5cf6 60%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-size: 200% auto;
+            animation: gradientShift 4s ease infinite;
+        }
+
+        @keyframes gradientShift {
+
+            0%,
+            100% {
+                background-position: 0% center;
+            }
+
+            50% {
+                background-position: 100% center;
+            }
+        }
+
+        .hero-subtitle {
+            font-size: 18px;
+            color: var(--text-2);
+            line-height: 1.7;
+            max-width: 640px;
+            margin: 0 auto 40px;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-2), var(--accent-3));
+            color: #fff;
+            box-shadow: 0 4px 25px var(--glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 40px var(--glow);
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-1);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .btn-outline:hover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+            transform: translateY(-2px);
+        }
+
+        /* ═══ Stats Bar ═══ */
+        .stats-bar {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            justify-content: center;
+            gap: 60px;
+            padding: 60px 40px;
+            animation: fadeInUp 0.8s ease 0.5s both;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 42px;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--accent), var(--accent-3));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-3);
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        /* ═══ Section ═══ */
+        .section {
+            position: relative;
+            z-index: 1;
+            padding: 100px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+        }
+
+        .section-desc {
+            font-size: 16px;
+            color: var(--text-2);
+            line-height: 1.7;
+            max-width: 600px;
+            margin-bottom: 48px;
+        }
+
+        /* ═══ Feature Grid ═══ */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 32px;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), var(--accent-3), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            border-color: rgba(59, 130, 246, 0.2);
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.4),
+                0 0 40px rgba(59, 130, 246, 0.08);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            margin-bottom: 20px;
+        }
+
+        .feature-icon.blue {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(99, 102, 241, 0.15));
+        }
+
+        .feature-icon.purple {
+            background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(168, 85, 247, 0.15));
+        }
+
+        .feature-icon.cyan {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
+        }
+
+        .feature-icon.green {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(5, 150, 105, 0.15));
+        }
+
+        .feature-icon.amber {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(234, 88, 12, 0.15));
+        }
+
+        .feature-icon.rose {
+            background: linear-gradient(135deg, rgba(244, 63, 94, 0.15), rgba(225, 29, 72, 0.15));
+        }
+
+        .feature-title {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            font-size: 14px;
+            color: var(--text-2);
+            line-height: 1.6;
+        }
+
+        /* ═══ How It Works ═══ */
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 32px;
+        }
+
+        .step-card {
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--accent-3));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0 auto 20px;
+            box-shadow: 0 4px 20px var(--glow);
+        }
+
+        .step-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .step-desc {
+            font-size: 13px;
+            color: var(--text-2);
+            line-height: 1.6;
+        }
+
+        /* ═══ Dialect Section ═══ */
+        .dialect-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .dialect-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .dialect-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(59, 130, 246, 0.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .dialect-flag {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .dialect-name {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .dialect-detail {
+            font-size: 12px;
+            color: var(--text-3);
+        }
+
+        /* ═══ Pricing ═══ */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 24px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .price-card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.4s;
+            position: relative;
+        }
+
+        .price-card.featured {
+            border-color: var(--accent);
+            box-shadow: 0 0 40px rgba(59, 130, 246, 0.1);
+        }
+
+        .price-card.featured::before {
+            content: 'RECOMMENDED';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 16px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-3));
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .price-card:hover {
+            transform: translateY(-6px);
+        }
+
+        .price-name {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .price-amount {
+            font-size: 48px;
+            font-weight: 900;
+            margin: 16px 0 8px;
+        }
+
+        .price-amount span {
+            font-size: 16px;
+            color: var(--text-3);
+            font-weight: 400;
+        }
+
+        .price-desc {
+            font-size: 14px;
+            color: var(--text-2);
+            margin-bottom: 24px;
+        }
+
+        .price-features {
+            list-style: none;
+            text-align: left;
+            margin-bottom: 24px;
+        }
+
+        .price-features li {
+            padding: 8px 0;
+            font-size: 14px;
+            color: var(--text-2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .price-features li:last-child {
+            border: none;
+        }
+
+        /* ═══ CTA Section ═══ */
+        .cta-section {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding: 100px 40px;
+        }
+
+        .cta-box {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 60px;
+            max-width: 700px;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--accent-3), var(--accent-4));
+        }
+
+        /* ═══ Footer ═══ */
+        .footer {
+            position: relative;
+            z-index: 1;
+            border-top: 1px solid var(--border);
+            padding: 40px;
+            text-align: center;
+        }
+
+        .footer-brand {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent), var(--accent-3));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }
+
+        .footer-text {
+            font-size: 13px;
+            color: var(--text-3);
+            margin-bottom: 8px;
+        }
+
+        .footer-link {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .footer-link:hover {
+            text-decoration: underline;
+        }
+
+        /* ═══ Responsive ═══ */
+        @media (max-width: 1024px) {
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .steps-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 0 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 100px 20px 60px;
+            }
+
+            .hero-title {
+                font-size: 32px;
+                letter-spacing: -1px;
+            }
+
+            .hero-subtitle {
+                font-size: 15px;
+            }
+
+            .stats-bar {
+                flex-wrap: wrap;
+                gap: 24px;
+            }
+
+            .stat-number {
+                font-size: 28px;
+            }
+
+            .section {
+                padding: 60px 20px;
+            }
+
+            .features-grid,
+            .dialect-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .steps-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .pricing-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .cta-box {
+                padding: 40px 24px;
+            }
+        }
+
+        /* ═══ Scroll animations ═══ */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 3px;
+        }
+
+        /* ═══ Light Mode ═══ */
+        [data-theme="light"] {
+            --bg-deep: #e8f0f8;
+            --bg-primary: #dce7f2;
+            --bg-card: rgba(255, 255, 255, 0.7);
+            --bg-glass: rgba(255, 255, 255, 0.5);
+            --text-1: #1e293b;
+            --text-2: #475569;
+            --text-3: #64748b;
+            --border: rgba(148, 163, 184, 0.2);
+            --glow: rgba(37, 99, 235, 0.15);
+            --accent: #2563eb;
+            --accent-2: #4f46e5;
+            --accent-3: #7c3aed;
+        }
+
+        [data-theme="light"] .navbar {
+            background: rgba(232, 240, 248, 0.88);
+        }
+
+        [data-theme="light"] .feature-card:hover {
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .dialect-card:hover {
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        .theme-toggle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-2);
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--accent);
+            transform: rotate(30deg);
+        }
+
+        body,
+        .navbar,
+        .feature-card,
+        .dialect-card,
+        .price-card,
+        .cta-box,
+        .footer {
+            transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="bgCanvas"></canvas>
+
+    <!-- ═══ Navbar ═══ -->
+    <nav class="navbar">
+        <a href="#" class="nav-brand">
+            <span class="nav-logo">TranscriptAI SK</span>
+            <span class="nav-author">by Shivam Kole</span>
+        </a>
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#dialects">Languages</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+            <li><button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">🌙</button></li>
+            <li><a href="#download" class="nav-cta">Download App</a></li>
+        </ul>
+    </nav>
+
+    <!-- ═══ Hero ═══ -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">🚀 Powered by Groq Whisper Large V3</div>
+            <h1 class="hero-title">
+                <span class="gradient-text">AI-Powered</span><br>
+                Meeting Transcription
+            </h1>
+            <p class="hero-subtitle">
+                100% word-for-word accuracy. Auto speaker detection. Multi-dialect English support.
+                Built for corporate Data Analysts who need perfect transcriptions — fast.
+            </p>
+            <div class="hero-actions">
+                <a href="#download" class="btn btn-primary">⬇️ Download Desktop App</a>
+                <a href="#features" class="btn btn-outline">✨ Explore Features</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Stats ═══ -->
+    <div class="stats-bar">
+        <div class="stat">
+            <div class="stat-number">100%</div>
+            <div class="stat-label">Word-for-Word Accuracy</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">10+</div>
+            <div class="stat-label">Parallel API Keys</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">50+</div>
+            <div class="stat-label">Corporate Users</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">6</div>
+            <div class="stat-label">English Dialects</div>
+        </div>
+    </div>
+
+    <!-- ═══ Features ═══ -->
+    <section class="section" id="features">
+        <div class="section-label reveal">Features</div>
+        <h2 class="section-title reveal">Everything You Need for<br>Perfect Transcriptions</h2>
+        <p class="section-desc reveal">
+            Built from the ground up for corporate environments. No compromises on accuracy, speed, or security.
+        </p>
+
+        <div class="features-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon blue">🎙️</div>
+                <div class="feature-title">Speaker Auto-Detection</div>
+                <div class="feature-desc">Automatically identifies speakers using voice frequency analysis and labels
+                    them throughout the transcript.</div>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon purple">⚡</div>
+                <div class="feature-title">Multi-Key Parallelism</div>
+                <div class="feature-desc">Add up to 10+ Groq API keys. The engine dynamically distributes chunks across
+                    all keys using round-robin for blazing speed.</div>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon cyan">🎵</div>
+                <div class="feature-title">MP3 Studio</div>
+                <div class="feature-desc">Compress (320→128kbps), merge, split, and convert audio files. Perfect for
+                    preparing large meeting recordings.</div>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon green">📅</div>
+                <div class="feature-title">Scheduled Transcriptions</div>
+                <div class="feature-desc">Schedule recurring transcriptions for regular meetings. Set it and forget it —
+                    results appear in your output folder.</div>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon amber">🔒</div>
+                <div class="feature-title">Corporate Security</div>
+                <div class="feature-desc">Zscaler SSL bypass, local data isolation (per-user LOCALAPPDATA), OneDrive
+                    sharing — built for enterprise environments.</div>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon rose">📄</div>
+                <div class="feature-title">PDF + TXT Output</div>
+                <div class="feature-desc">Professional PDFs with company headers, speaker labels, processing time, and
+                    page numbers — ready for sharing.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ How It Works ═══ -->
+    <section class="section" id="how-it-works">
+        <div class="section-label reveal">How It Works</div>
+        <h2 class="section-title reveal">Four Steps to Perfect Transcription</h2>
+        <p class="section-desc reveal">From meeting URL to formatted PDF in minutes.</p>
+
+        <div class="steps-grid">
+            <div class="step-card reveal">
+                <div class="step-number">1</div>
+                <div class="step-title">Add API Keys</div>
+                <div class="step-desc">Paste your free Groq API keys. More keys = faster transcription through parallel
+                    processing.</div>
+            </div>
+            <div class="step-card reveal">
+                <div class="step-number">2</div>
+                <div class="step-title">Upload or Paste URL</div>
+                <div class="step-desc">Drop an MP3 file or paste a YouTube/ON24/Teams meeting URL. The app downloads and
+                    converts automatically.</div>
+            </div>
+            <div class="step-card reveal">
+                <div class="step-number">3</div>
+                <div class="step-title">AI Transcribes</div>
+                <div class="step-desc">Audio is split into chunks, transcribed in parallel with Whisper Large V3, and
+                    post-processed with speaker labels.</div>
+            </div>
+            <div class="step-card reveal">
+                <div class="step-number">4</div>
+                <div class="step-title">Get Results</div>
+                <div class="step-desc">PDF and TXT files are saved to your output folder. Compressed MP3 is saved
+                    separately. View anytime in History.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Dialects ═══ -->
+    <section class="section" id="dialects">
+        <div class="section-label reveal">Multi-Dialect Support</div>
+        <h2 class="section-title reveal">Understands Every English Accent</h2>
+        <p class="section-desc reveal">Configured for accurate transcription across all major English dialects used in
+            corporate meetings worldwide.</p>
+
+        <div class="dialect-grid">
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🇮🇳</div>
+                <div class="dialect-name">Indian English</div>
+                <div class="dialect-detail">Lakh, Crore, prepone, revert — preserved accurately</div>
+            </div>
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🇺🇸</div>
+                <div class="dialect-name">American English</div>
+                <div class="dialect-detail">Standard US pronunciation and spelling</div>
+            </div>
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🇬🇧</div>
+                <div class="dialect-name">British English</div>
+                <div class="dialect-detail">Organisation, colour — British conventions</div>
+            </div>
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🇦🇺</div>
+                <div class="dialect-name">Australian English</div>
+                <div class="dialect-detail">Australian accent and terminology support</div>
+            </div>
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🌍</div>
+                <div class="dialect-name">Mixed (Multi-Accent)</div>
+                <div class="dialect-detail">For meetings with speakers from different regions</div>
+            </div>
+            <div class="dialect-card reveal">
+                <div class="dialect-flag">🤖</div>
+                <div class="dialect-name">Auto-Detect</div>
+                <div class="dialect-detail">Let AI automatically detect and adapt to accents</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Pricing ═══ -->
+    <section class="section" id="pricing">
+        <div class="section-label reveal">Pricing</div>
+        <h2 class="section-title reveal">100% Free. Zero Cost.</h2>
+        <p class="section-desc reveal">Use free Groq API keys for unlimited transcriptions. Add paid keys only if you
+            need higher speed.</p>
+
+        <div class="pricing-grid">
+            <div class="price-card featured reveal">
+                <div class="price-name">Free Tier</div>
+                <div class="price-amount">$0 <span>/ forever</span></div>
+                <div class="price-desc">Everything you need with free Groq keys</div>
+                <ul class="price-features">
+                    <li>✅ Unlimited transcriptions</li>
+                    <li>✅ Speaker detection</li>
+                    <li>✅ PDF + TXT output</li>
+                    <li>✅ MP3 compression tools</li>
+                    <li>✅ Up to 10 free API keys</li>
+                    <li>✅ Multi-dialect support</li>
+                    <li>✅ Scheduling</li>
+                </ul>
+                <a href="#download" class="btn btn-primary" style="width:100%;">Get Started Free</a>
+            </div>
+            <div class="price-card reveal">
+                <div class="price-name">Paid Keys</div>
+                <div class="price-amount">~$5 <span>/ month</span></div>
+                <div class="price-desc">For teams needing maximum speed</div>
+                <ul class="price-features">
+                    <li>✅ Everything in Free</li>
+                    <li>✅ 10x higher rate limits</li>
+                    <li>✅ Faster processing</li>
+                    <li>✅ Priority API access</li>
+                    <li>✅ One paid key = 10 free keys</li>
+                    <li>✅ Ideal for 10-15 analysts</li>
+                    <li>✅ Enterprise ready</li>
+                </ul>
+                <a href="https://console.groq.com" target="_blank" class="btn btn-outline" style="width:100%;">Get Groq
+                    API Key</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══ Download CTA ═══ -->
+    <section class="cta-section" id="download">
+        <div class="cta-box reveal">
+            <h2 style="font-size: 32px; font-weight: 800; margin-bottom: 16px; letter-spacing: -1px;">
+                Ready to Transform Your<br>
+                <span
+                    style="background: linear-gradient(135deg, var(--accent), var(--accent-3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Meeting
+                    Workflow?</span>
+            </h2>
+            <p style="font-size: 15px; color: var(--text-2); margin-bottom: 32px; line-height: 1.7;">
+                Download AI Transcriptor, add your free Groq API keys, and start getting word-perfect transcriptions in
+                minutes.
+                Works on Windows, macOS, and Linux.
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <a href="https://github.com/shivamkole/TranscriptAI-SK/releases" target="_blank"
+                    class="btn btn-primary">
+                    ⬇️ Download for Windows
+                </a>
+                <a href="https://github.com/shivamkole/TranscriptAI-SK" target="_blank" class="btn btn-outline">
+                    🐙 View on GitHub
+                </a>
+            </div>
+            <p style="font-size: 12px; color: var(--text-3); margin-top: 16px;">
+                Python 3.10+ required. Works behind corporate firewalls. OneDrive shareable.
+            </p>
+        </div>
+    </section>
+
+    <!-- ═══ Feedback ═══ -->
+    <section class="section" style="padding-top: 40px;">
+        <div class="cta-box reveal" style="max-width: 500px; margin: 0 auto; padding: 40px;">
+            <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">💬 Feedback & Support</h3>
+            <p style="font-size: 14px; color: var(--text-2); margin-bottom: 20px;">
+                Have suggestions or found a bug? Reach out directly.
+            </p>
+            <a href="mailto:shivamkole1234@gmail.com" class="btn btn-outline" style="width: 100%;">
+                📨 shivamkole1234@gmail.com
+            </a>
+        </div>
+    </section>
+
+    <!-- ═══ Footer ═══ -->
+    <footer class="footer">
+        <div class="footer-brand">TranscriptAI SK</div>
+        <p class="footer-text">Enterprise-grade AI Meeting Transcription</p>
+        <p class="footer-text">
+            Built with ❤️ by <a href="mailto:shivamkole1234@gmail.com" class="footer-link">Shivam Kole</a>
+        </p>
+        <p class="footer-text" style="margin-top: 12px;">© 2026 AI Transcriptor. All rights reserved.</p>
+    </footer>
+
+    <!-- ═══ Scripts ═══ -->
+    <script>
+        // ─── 3D Wave + Sparkle Background ─────────────────────────
+        (function () {
+            const canvas = document.getElementById('bgCanvas');
+            const ctx = canvas.getContext('2d');
+            let w, h, time = 0;
+            const particles = [];
+            const PARTICLE_COUNT = 100;
+
+            class Particle {
+                constructor() { this.reset(); }
+                reset() {
+                    this.x = Math.random() * w;
+                    this.y = Math.random() * h;
+                    this.size = Math.random() * 2.5 + 0.5;
+                    this.speedX = (Math.random() - 0.5) * 0.4;
+                    this.speedY = (Math.random() - 0.5) * 0.2 - 0.05;
+                    this.hue = 210 + Math.random() * 50;
+                    this.twinkle = Math.random() * 0.02 + 0.01;
+                    this.offset = Math.random() * Math.PI * 2;
+                }
+                update() {
+                    this.x += this.speedX;
+                    this.y += this.speedY;
+                    this.opacity = 0.1 + Math.abs(Math.sin(time * this.twinkle + this.offset)) * 0.6;
+                    if (this.x < -10) this.x = w + 10;
+                    if (this.x > w + 10) this.x = -10;
+                    if (this.y < -10) this.y = h + 10;
+                    if (this.y > h + 10) this.y = -10;
+                }
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                    ctx.fillStyle = `hsla(${this.hue}, 80%, 75%, ${this.opacity})`;
+                    ctx.fill();
+                    if (this.size > 1.5) {
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+                        ctx.fillStyle = `hsla(${this.hue}, 80%, 75%, ${this.opacity * 0.12})`;
+                        ctx.fill();
+                    }
+                }
+            }
+
+            const waves = [
+                { amp: 30, freq: 0.006, speed: 0.012, yOff: 0.72, color: [59, 130, 246], alpha: 0.06 },
+                { amp: 22, freq: 0.01, speed: 0.018, yOff: 0.76, color: [99, 102, 241], alpha: 0.05 },
+                { amp: 35, freq: 0.005, speed: 0.008, yOff: 0.8, color: [139, 92, 246], alpha: 0.04 },
+                { amp: 18, freq: 0.013, speed: 0.022, yOff: 0.68, color: [6, 182, 212], alpha: 0.03 },
+            ];
+
+            function drawWave(wave, t) {
+                const baseY = h * wave.yOff;
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                for (let x = 0; x <= w; x += 2) {
+                    const y = baseY +
+                        Math.sin(x * wave.freq + t * wave.speed) * wave.amp +
+                        Math.sin(x * wave.freq * 1.5 + t * wave.speed * 0.7) * wave.amp * 0.4 +
+                        Math.cos(x * wave.freq * 0.5 + t * wave.speed * 1.3) * wave.amp * 0.25;
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(w, h);
+                ctx.closePath();
+                const grad = ctx.createLinearGradient(0, baseY - wave.amp, 0, h);
+                grad.addColorStop(0, `rgba(${wave.color.join(',')}, ${wave.alpha})`);
+                grad.addColorStop(1, `rgba(${wave.color.join(',')}, 0)`);
+                ctx.fillStyle = grad;
+                ctx.fill();
+            }
+
+            function drawConnections() {
+                for (let i = 0; i < particles.length; i++) {
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const dx = particles[i].x - particles[j].x;
+                        const dy = particles[i].y - particles[j].y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 130) {
+                            ctx.beginPath();
+                            ctx.moveTo(particles[i].x, particles[i].y);
+                            ctx.lineTo(particles[j].x, particles[j].y);
+                            ctx.strokeStyle = `rgba(100,140,255,${(1 - dist / 130) * 0.06})`;
+                            ctx.lineWidth = 0.5;
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            function render() {
+                time++;
+                ctx.clearRect(0, 0, w, h);
+                for (let i = waves.length - 1; i >= 0; i--) drawWave(waves[i], time);
+                drawConnections();
+                particles.forEach(p => { p.update(); p.draw(); });
+                requestAnimationFrame(render);
+            }
+
+            function resize() {
+                const dpr = Math.min(window.devicePixelRatio || 1, 2);
+                w = window.innerWidth;
+                h = window.innerHeight;
+                canvas.width = w * dpr;
+                canvas.height = h * dpr;
+                canvas.style.width = w + 'px';
+                canvas.style.height = h + 'px';
+                ctx.scale(dpr, dpr);
+                particles.length = 0;
+                for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new Particle());
+            }
+
+            window.addEventListener('resize', resize);
+            resize();
+            render();
+        })();
+
+        // ─── Scroll Reveal ────────────────────────────────────────
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // ─── Smooth scroll for nav links ──────────────────────────
+        document.querySelectorAll('a[href^="#"]').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                const target = document.querySelector(a.getAttribute('href'));
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+        // ─── Theme Toggle ──────────────────────────────────────────
+        function toggleTheme() {
+            const html = document.documentElement;
+            const cur = html.getAttribute('data-theme');
+            const next = cur === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', next);
+            localStorage.setItem('transcriptai-theme', next);
+            document.getElementById('themeToggle').textContent = next === 'light' ? '☀️' : '🌙';
+            const canvas = document.getElementById('bgCanvas');
+            if (canvas) canvas.style.opacity = next === 'light' ? '0.4' : '1';
+        }
+        (function () {
+            const s = localStorage.getItem('transcriptai-theme');
+            if (s) {
+                document.documentElement.setAttribute('data-theme', s);
+                const btn = document.getElementById('themeToggle');
+                if (btn) btn.textContent = s === 'light' ? '☀️' : '🌙';
+                const c = document.getElementById('bgCanvas');
+                if (c) c.style.opacity = s === 'light' ? '0.4' : '1';
+            }
+        })();
+    </script>
+</body>
+
+</html>
