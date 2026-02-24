@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app files
 COPY main.py .
+COPY ytdlp_bypass.py .
 COPY custom_bundle.pem .
 COPY static/ ./static/
 COPY templates/ ./templates/
