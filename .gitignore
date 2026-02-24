@@ -1,6 +1,9 @@
 # Python
 __pycache__/
 *.py[cod]
+
+# Example data (large PDFs)
+Example data/
 *.egg-info/
 dist/
 build/
