@@ -292,6 +292,8 @@ class TranscriptionEngine:
                 "--no-check-certificates",
                 "-x", "--audio-format", "mp3",
                 "--audio-quality", "128K",
+                "--no-playlist",
+                "--socket-timeout", "30",
                 "-o", str(TEMP_DIR / f"{job_id}.%(ext)s"),
                 url
             ]
@@ -304,6 +306,14 @@ class TranscriptionEngine:
                 stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
+            
+            # Log yt-dlp output for debugging
+            stderr_text = stderr.decode(errors='replace').strip()
+            stdout_text = stdout.decode(errors='replace').strip()
+            if stderr_text:
+                logger.warning(f"yt-dlp stderr: {stderr_text[-500:]}")
+            if stdout_text:
+                logger.info(f"yt-dlp stdout: {stdout_text[-300:]}")
             
             # Find the output file
             for f in TEMP_DIR.iterdir():
@@ -318,7 +328,19 @@ class TranscriptionEngine:
                         return mp3_path
                     return f
             
-            await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download failed. Check if the URL is valid."})
+            # Show the actual error to the user
+            error_hint = ""
+            if "live" in stderr_text.lower() or "live" in url.lower():
+                error_hint = " This appears to be a live stream — try again after the stream ends, or use the recorded/archived version URL."
+            elif "private" in stderr_text.lower():
+                error_hint = " This video appears to be private or restricted."
+            elif "unavailable" in stderr_text.lower():
+                error_hint = " This video is unavailable in this region or has been removed."
+            elif "sign in" in stderr_text.lower() or "age" in stderr_text.lower():
+                error_hint = " This video requires sign-in or age verification."
+            
+            await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download failed.{error_hint} Check if the URL is valid."})
+            logger.error(f"Download failed for {url}. yt-dlp exit code: {process.returncode}")
             return None
         except Exception as e:
             await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download error: {str(e)}"})
