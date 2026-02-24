@@ -292,6 +292,32 @@
                             <button type="submit" class="btn btn-primary w-full">🔄 Convert to MP3</button>
                         </form>
                     </div>
+
+                    <!-- From Link -->
+                    <div class="tool-card">
+                        <div class="tool-icon split">🌐</div>
+                        <h3 class="tool-name">Link to MP3</h3>
+                        <p class="tool-desc">Download audio from any URL and optionally compress it to a target bitrate.
+                        </p>
+                        <form id="linkForm">
+                            <div class="form-group">
+                                <input type="url" class="form-input" id="linkUrl"
+                                    placeholder="Paste video/audio URL here..." required>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Target Bitrate</label>
+                                <select class="form-select" id="linkBitrate">
+                                    <option value="64k">64 kbps (Smallest)</option>
+                                    <option value="96k">96 kbps</option>
+                                    <option value="128k" selected>128 kbps (Recommended)</option>
+                                    <option value="192k">192 kbps</option>
+                                    <option value="256k">256 kbps</option>
+                                    <option value="320k">320 kbps (Best Quality)</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-success w-full">🌐 Download & Compress</button>
+                        </form>
+                    </div>
                 </div>
 
                 <!-- MP3 Tips -->

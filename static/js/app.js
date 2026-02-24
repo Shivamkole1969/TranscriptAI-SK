@@ -451,6 +451,43 @@ function initMP3Tools() {
         btn.disabled = false;
         btn.innerHTML = '🔄 Convert to MP3';
     });
+
+    // ─── Link to MP3 ────────────────────────────────────────────────
+    document.getElementById('linkForm')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const urlInput = document.getElementById('linkUrl').value;
+        const bitrate = document.getElementById('linkBitrate')?.value || '128k';
+
+        if (!urlInput) {
+            showToast('error', 'Please enter a URL');
+            return;
+        }
+
+        const btn = e.target.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Downloading...';
+
+        const formData = new FormData();
+        formData.append('url', urlInput);
+        formData.append('bitrate', bitrate);
+
+        try {
+            const res = await fetch('/api/mp3/from-link', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast('success', `Saved! Extracted to MP3 (${data.size_mb}MB)`);
+                document.getElementById('linkUrl').value = '';
+            } else {
+                throw new Error(data.detail || data.error || 'Extraction failed');
+            }
+        } catch (err) {
+            showToast('error', `Download failed: ${err.message}`);
+        }
+
+        btn.disabled = false;
+        btn.innerHTML = '🌐 Download & Compress';
+    });
 }
 
 // ─── API Keys ─────────────────────────────────────────────────────

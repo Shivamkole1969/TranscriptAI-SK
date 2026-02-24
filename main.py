@@ -511,6 +511,10 @@ class TranscriptionEngine:
         chunks = await loop.run_in_executor(None, self.split_audio, audio_path, chunk_minutes)
         total_chunks = len(chunks)
         
+        if total_chunks == 0:
+            await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": "❌ Extracted audio is empty or corrupted. Cannot transcribe."})
+            return {"error": "No chunks generated"}
+            
         await ws_manager.broadcast({
             "type": "log", "job_id": job_id,
             "message": f"📦 Split into {total_chunks} chunks. Starting parallel transcription with {len(all_keys)} API key(s)..."
@@ -593,7 +597,7 @@ class TranscriptionEngine:
         for chunk in chunks:
             try:
                 chunk.unlink()
-            except:
+            except Exception:
                 pass
 
         result_data = {
@@ -725,7 +729,7 @@ async def transcribe_url(request: Request):
             await engine.transcribe_full(audio_path, job_id, company_name)
             try:
                 audio_path.unlink()
-            except:
+            except Exception:
                 pass
     
     asyncio.create_task(run_job())
@@ -748,7 +752,7 @@ async def transcribe_upload(
         await engine.transcribe_full(file_path, job_id, company_name)
         try:
             file_path.unlink()
-        except:
+        except Exception:
             pass
     
     asyncio.create_task(run_job())
@@ -860,6 +864,40 @@ async def convert_to_mp3(
     
     return {
         "status": "success",
+        "output_path": str(output_path),
+        "size_mb": round(output_path.stat().st_size / (1024 * 1024), 2) if output_path.exists() else 0
+    }
+
+@app.post("/api/mp3/from-link")
+async def mp3_from_link(
+    url: str = Form(...),
+    bitrate: str = Form("128k")
+):
+    job_id = str(uuid.uuid4())[:8]
+    
+    # 1. Download
+    audio_path = await engine.download_audio(url, job_id)
+    if not audio_path:
+        raise HTTPException(status_code=400, detail="Could not download audio from link")
+        
+    # 2. Compress to desired bitrate
+    output_path = MP3_DIR / f"downloaded_{job_id}.mp3"
+    ffmpeg = FFMPEG_PATH or "ffmpeg"
+    
+    process = await asyncio.create_subprocess_exec(
+        ffmpeg, "-i", str(audio_path), "-codec:a", "libmp3lame", "-b:a", bitrate, "-y", str(output_path),
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+    await process.communicate()
+    
+    try:
+        audio_path.unlink()
+    except Exception:
+        pass
+        
+    return {
+        "status": "success",
+        "job_id": job_id,
         "output_path": str(output_path),
         "size_mb": round(output_path.stat().st_size / (1024 * 1024), 2) if output_path.exists() else 0
     }
