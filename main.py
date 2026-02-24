@@ -929,27 +929,39 @@ def open_browser():
     webbrowser.open("http://127.0.0.1:8765")
 
 if __name__ == "__main__":
+    # Detect cloud deployment (Render.com sets RENDER=true)
+    is_cloud = os.environ.get("RENDER") == "true"
+    port = int(os.environ.get("PORT", 8765))
+    host = "0.0.0.0" if is_cloud else "127.0.0.1"
+
     logger.info("=" * 60)
     logger.info("  AI Transcriptor by Shivam Kole")
+    logger.info(f"  Mode: {'☁️ Cloud (Render.com)' if is_cloud else '🖥️ Desktop'}")
+    logger.info(f"  Binding: {host}:{port}")
     logger.info(f"  Data Dir: {APP_DATA_DIR}")
     logger.info(f"  FFmpeg: {FFMPEG_PATH or 'Not found'}")
     logger.info(f"  SSL Cert: {'Yes' if cert_path.exists() else 'No'}")
     logger.info(f"  API Keys: {len(settings_manager.get_all_keys())}")
     logger.info("=" * 60)
-    
-    # Try pywebview first, fallback to browser
-    try:
-        import webview
-        server_thread = threading.Thread(
-            target=uvicorn.run, args=(app,),
-            kwargs={"host": "127.0.0.1", "port": 8765, "log_level": "warning"},
-            daemon=True
-        )
-        server_thread.start()
-        time.sleep(1)
-        webview.create_window("AI Transcriptor by Shivam Kole", "http://127.0.0.1:8765", width=1400, height=900)
-        webview.start()
-    except ImportError:
-        logger.info("pywebview not available, opening in browser...")
-        threading.Thread(target=open_browser, daemon=True).start()
-        uvicorn.run(app, host="127.0.0.1", port=8765, log_level="info")
+
+    if is_cloud:
+        # Cloud mode: just run uvicorn, no browser/pywebview
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    else:
+        # Desktop mode: try pywebview first, fallback to browser
+        try:
+            import webview
+            server_thread = threading.Thread(
+                target=uvicorn.run, args=(app,),
+                kwargs={"host": host, "port": port, "log_level": "warning"},
+                daemon=True
+            )
+            server_thread.start()
+            time.sleep(1)
+            webview.create_window("AI Transcriptor by Shivam Kole", f"http://127.0.0.1:{port}", width=1400, height=900)
+            webview.start()
+        except ImportError:
+            logger.info("pywebview not available, opening in browser...")
+            threading.Thread(target=open_browser, daemon=True).start()
+            uvicorn.run(app, host=host, port=port, log_level="info")
+
