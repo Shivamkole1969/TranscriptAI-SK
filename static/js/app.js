@@ -523,6 +523,14 @@ async function addAPIKeys(type) {
     }
 
     AppState.settings[settingsKey] = existingKeys;
+
+    // Save to local storage for persistence (12 hours)
+    localStorage.setItem('cached_api_keys', JSON.stringify({
+        paid: AppState.settings.paid_api_keys || [],
+        free: AppState.settings.free_api_keys || [],
+        timestamp: Date.now()
+    }));
+
     await saveSettings();
     renderAPIKeys();
     input.value = '';
@@ -542,6 +550,13 @@ async function removeAPIKey(type, index) {
     const keys = AppState.settings[settingsKey] || [];
     keys.splice(index, 1);
     AppState.settings[settingsKey] = keys;
+
+    // Update local storage persistence
+    localStorage.setItem('cached_api_keys', JSON.stringify({
+        paid: AppState.settings.paid_api_keys || [],
+        free: AppState.settings.free_api_keys || [],
+        timestamp: Date.now()
+    }));
 
     await saveSettings();
     renderAPIKeys();
@@ -617,7 +632,43 @@ function updateKeyCount() {
 async function loadSettings() {
     try {
         const res = await fetch('/api/settings');
-        AppState.settings = await res.json();
+        const serverSettings = await res.json();
+
+        let shouldSaveSettings = false;
+
+        // ─── LocalStorage Key Recovery (12 Hours) ───
+        const cachedStr = localStorage.getItem('cached_api_keys');
+        if (cachedStr) {
+            try {
+                const cache = JSON.parse(cachedStr);
+                const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
+                if (Date.now() - cache.timestamp <= TWELVE_HOURS) {
+                    // Cache is valid, merge keys that aren't already string on server
+                    if (cache.paid.length > 0 && (!serverSettings.paid_api_keys || serverSettings.paid_api_keys.length === 0)) {
+                        serverSettings.paid_api_keys = cache.paid;
+                        shouldSaveSettings = true;
+                    }
+                    if (cache.free.length > 0 && (!serverSettings.free_api_keys || serverSettings.free_api_keys.length === 0)) {
+                        serverSettings.free_api_keys = cache.free;
+                        shouldSaveSettings = true;
+                    }
+                } else {
+                    // Expired
+                    localStorage.removeItem('cached_api_keys');
+                }
+            } catch (e) {
+                console.warn('Could not parse cached keys', e);
+            }
+        }
+
+        AppState.settings = serverSettings;
+
+        if (shouldSaveSettings) {
+            console.log("Recovered keys from localStorage, saving to server...");
+            await saveSettings();
+        }
+
         renderAPIKeys();
         updateKeyCount();
         applySettings();
