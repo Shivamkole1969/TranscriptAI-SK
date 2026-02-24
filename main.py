@@ -331,17 +331,22 @@ class TranscriptionEngine:
             
             # Show the actual error to the user
             error_hint = ""
-            if "live" in stderr_text.lower() or "live" in url.lower():
-                error_hint = " This appears to be a live stream — try again after the stream ends, or use the recorded/archived version URL."
-            elif "private" in stderr_text.lower():
+            stderr_lower = stderr_text.lower()
+            if "is_live" in stderr_lower or "live event" in stderr_lower or "this live event will begin" in stderr_lower:
+                error_hint = " This appears to be an active live stream — try again after it ends."
+            elif "private" in stderr_lower:
                 error_hint = " This video appears to be private or restricted."
-            elif "unavailable" in stderr_text.lower():
+            elif "unavailable" in stderr_lower or "not available" in stderr_lower:
                 error_hint = " This video is unavailable in this region or has been removed."
-            elif "sign in" in stderr_text.lower() or "age" in stderr_text.lower():
+            elif "sign in" in stderr_lower or "age" in stderr_lower:
                 error_hint = " This video requires sign-in or age verification."
+            elif "no supported javascript" in stderr_lower or "js runtime" in stderr_lower:
+                error_hint = " yt-dlp needs a JavaScript runtime (Node.js). Server may need updating."
             
-            await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download failed.{error_hint} Check if the URL is valid."})
-            logger.error(f"Download failed for {url}. yt-dlp exit code: {process.returncode}")
+            # Show last line of stderr for debugging
+            last_err = stderr_text.split('\n')[-1][:150] if stderr_text else "No output from yt-dlp"
+            await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download failed.{error_hint} ({last_err})"})
+            logger.error(f"Download failed for {url}. Exit: {process.returncode}. stderr: {stderr_text[-500:]}")
             return None
         except Exception as e:
             await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download error: {str(e)}"})
