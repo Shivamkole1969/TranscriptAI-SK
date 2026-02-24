@@ -6,6 +6,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Create non-root user (HF Spaces requirement)
+RUN useradd -m -u 1000 appuser
+
 WORKDIR /app
 
 # Copy requirements first for Docker cache
@@ -18,16 +21,20 @@ COPY custom_bundle.pem .
 COPY static/ ./static/
 COPY templates/ ./templates/
 
-# Create data directories
-RUN mkdir -p /app/data /app/output
+# Create data directories with correct permissions
+RUN mkdir -p /app/data /app/output && \
+    chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
 
 # Environment
 ENV PYTHONUNBUFFERED=1
-ENV PORT=10000
+ENV PORT=7860
 ENV RENDER=true
 
-# Expose Render's default port
-EXPOSE 10000
+# Expose HF Spaces default port
+EXPOSE 7860
 
-# Run with dynamic port binding
+# Run
 CMD ["python", "main.py"]
