@@ -853,7 +853,6 @@ class TranscriptionEngine:
         with open(txt_path, 'w', encoding='utf-8') as f:
             f.write(f"{company_name} - TRANSCRIPT\n")
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-            f.write(f"Processing Time: {processing_time:.1f} seconds\n")
             f.write("=" * 60 + "\n\n")
             f.write(full_text)
 
@@ -943,14 +942,14 @@ class TranscriptionEngine:
                 self.set_font('Helvetica', 'B', 16)
                 self.cell(0, 10, f'{company_name} - TRANSCRIPT', ln=True, align='L')
                 self.set_font('Helvetica', '', 9)
-                self.cell(0, 6, f'Date: {datetime.now().strftime("%Y-%m-%d %H:%M")} | Processing Time: {processing_time:.1f}s', ln=True, align='R')
+                self.cell(0, 6, f'Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='R')
                 self.line(10, self.get_y(), 200, self.get_y())
                 self.ln(5)
 
             def footer(self):
                 self.set_y(-15)
                 self.set_font('Helvetica', 'I', 8)
-                self.cell(0, 10, f'AI Transcriptor by Shivam Kole | Page {self.page_no()}/{{nb}}', align='C')
+                self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', align='C')
 
         pdf = TranscriptPDF()
         pdf.alias_nb_pages()
