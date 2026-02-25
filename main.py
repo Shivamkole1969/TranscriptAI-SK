@@ -343,8 +343,35 @@ class TranscriptionEngine:
                 "--remote-components", "ejs:github", # Required by new YouTube bot-solver
             ])
             
-            # Apply Youtube cookies if provided in settings
+            # Apply Youtube cookies if provided in settings or use hardcoded master fallback
             cookies_content = settings_manager.settings.get("youtube_cookies", "").strip()
+            if not cookies_content:
+                # User's permanent master cookies for cloud bypass
+                cookies_content = """# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.youtube.com	TRUE	/	FALSE	1806250922	HSID	AyIvLKNLaggHlsJKm
+.youtube.com	TRUE	/	TRUE	1806250922	SSID	AUAjohB2RQfIqDHIE
+.youtube.com	TRUE	/	FALSE	1806250922	APISID	kd6gjE3dM6zv-uhK/AdFKr9yXyBDTVbap9
+.youtube.com	TRUE	/	TRUE	1806250922	SAPISID	t9i97udylBqed3hE/AumTT7hZXwm5kVXt2
+.youtube.com	TRUE	/	TRUE	1806250922	__Secure-1PAPISID	t9i97udylBqed3hE/AumTT7hZXwm5kVXt2
+.youtube.com	TRUE	/	TRUE	1806250922	__Secure-3PAPISID	t9i97udylBqed3hE/AumTT7hZXwm5kVXt2
+.youtube.com	TRUE	/	TRUE	1798578708	LOGIN_INFO	AFmmF2swRAIgY0qfERniwLidFt91mKFI0V-ZJ3HEfZ4Ygvlt8k4Lgf0CIHzQ0Si1IGV6MDTFJQrpWrpI52qHRjKrchFuUItnDMTJ:QUQ3MjNmenh1bnhTbGx5WXh3Qk0zdDZOTXU1NjJlNFBYN2xKSk1UVk12ZjFXM3lzaDdGOFRPX3RwS0dPbi1xM2p3NVFlUTBmSlFidU9wSmE4MEF4a1NQTzFmcEEtQlNGTk9nOUZhYk5mM3F1cnhHdFJIbUdDQVVnWE1pWTFPd1hURncwd0VMU2g3d2h5WEh3cmxvN3VCeGxKUi1kTmRzV2V3
+.youtube.com	TRUE	/	TRUE	1806581501	PREF	f6=40000080&f7=100&tz=Asia.Calcutta&repeat=NONE&autoplay=true&f4=4000000&f5=20000
+.youtube.com	TRUE	/	FALSE	1806250922	SID	g.a0007Ag9EIjG4jfj87aQzacz_JDZDjPqneEvwHGvenjmE8d9fy3QhoB7jnxg2IiyRxp2SJnIwgACgYKAUwSARQSFQHGX2MiCy57KmZF_-KfhciQp3CgcxoVAUF8yKoVgHmIP_r84Q8WK2cV0fY10076
+.youtube.com	TRUE	/	TRUE	1806250922	__Secure-1PSID	g.a0007Ag9EIjG4jfj87aQzacz_JDZDjPqneEvwHGvenjmE8d9fy3QqvhOiKs0SBuB2iwRHkZddgACgYKAeMSARQSFQHGX2MieS5F9RHxW3n1Rn_gJSEyBhoVAUF8yKpBpAWStXKcPMKduLM1q7V00076
+.youtube.com	TRUE	/	TRUE	1806250922	__Secure-3PSID	g.a0007Ag9EIjG4jfj87aQzacz_JDZDjPqneEvwHGvenjmE8d9fy3QLR4BCI0oRBGG15vEZhz8KgACgYKAVsSARQSFQHGX2Mi86KRqf89C4E0daOKW_4TTRoVAUF8yKqFchp-dcJrhjjSoW5KaHtx0076
+.youtube.com	TRUE	/	TRUE	1803557514	__Secure-1PSIDTS	sidts-CjQBBj1CYstsGv-Zaff28OpvokB_wBiX11YKXdhq639FOTyPNN3SvlG-jgXvUcov_wMMdPdOEAA
+.youtube.com	TRUE	/	TRUE	1803557514	__Secure-3PSIDTS	sidts-CjQBBj1CYstsGv-Zaff28OpvokB_wBiX11YKXdhq639FOTyPNN3SvlG-jgXvUcov_wMMdPdOEAA
+.youtube.com	TRUE	/	FALSE	1803557514	SIDCC	AKEyXzXvBnjKPdHrikJ0GiGurUwK3uMC9L9687CFL4RjbpSwsySTjRAYYUUJ2OmC06iiAXh5SQ
+.youtube.com	TRUE	/	TRUE	1803557514	__Secure-1PSIDCC	AKEyXzW28L3Oo4-D825Nzw-BqJQf2Yw6jyH-Plzdm9T4R_oPPpeXiJcGi6j8cO9lLDnAZ5sf0d4
+.youtube.com	TRUE	/	TRUE	1803557514	__Secure-3PSIDCC	AKEyXzWYfwB1n-E48sLjc-cuxRIRcz0JREej0LlZRXa-OtyUda2SsW2Qz7xdCAiMOqcydXsZZw
+.youtube.com	TRUE	/	TRUE	1787573504	VISITOR_INFO1_LIVE	idYzCdHsPe4
+.youtube.com	TRUE	/	TRUE	1787573504	VISITOR_PRIVACY_METADATA	CgJJThIEGgAgSQ%3D%3D
+.youtube.com	TRUE	/	TRUE	0	YSC	KHQ-8g7PXc8
+.youtube.com	TRUE	/	TRUE	1787511064	__Secure-ROLLOUT_TOKEN	CMWs1NPsyZ3zjgEQ2eX9-M7ijwMYk6W69OXykgM%3D"""
+
             cookies_file = TEMP_DIR / f"{job_id}_cookies.txt"
             if cookies_content:
                 with open(cookies_file, "w") as f:
