@@ -745,9 +745,6 @@ function applySettings() {
 
     const cookiesInput = document.getElementById('settingYoutubeCookies');
     if (cookiesInput) cookiesInput.value = AppState.settings.youtube_cookies || '';
-
-    const rapidApiInput = document.getElementById('settingRapidApiKey');
-    if (rapidApiInput) rapidApiInput.value = AppState.settings.rapidapi_key || '';
 }
 
 async function updateSetting(key, value) {
