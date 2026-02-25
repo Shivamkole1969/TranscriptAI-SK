@@ -325,7 +325,13 @@ class TranscriptionEngine:
                 logger.warning(f"Primary Pytubefix download failed, falling back to yt-dlp: {e}")
                 
         try:
-            cmd = [sys.executable, "-m", "yt_dlp"]
+            is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
+            
+            cmd = [sys.executable]
+            if is_cloud:
+                cmd.append(str(BASE_DIR / "ytdlp_bypass.py"))
+            else:
+                cmd.extend(["-m", "yt_dlp"])
                 
             cmd.extend([
                 "--no-check-certificates",
