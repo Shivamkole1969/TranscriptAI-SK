@@ -50,6 +50,7 @@ pyinstaller ^
     --hidden-import "pydub" ^
     --hidden-import "fpdf" ^
     --hidden-import "yt_dlp" ^
+    --hidden-import "pytubefix" ^
     --hidden-import "aiofiles" ^
     --hidden-import "multipart" ^
     --hidden-import "websockets" ^
