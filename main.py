@@ -592,29 +592,29 @@ class TranscriptionEngine:
             return None
 
     def split_audio(self, audio_path: Path, chunk_minutes: int = 10) -> List[Path]:
-        """Split audio into chunks using FFmpeg for speed and memory efficiency."""
+        """Split audio into chunks using FFmpeg stream copy for instant speed."""
         import subprocess
         
         chunk_seconds = chunk_minutes * 60
-        output_pattern = str(TEMP_DIR / f"{audio_path.stem}_chunk_%04d.mp3")
+        ext = audio_path.suffix.lower() if audio_path.suffix else ".mp3"
+        output_pattern = str(TEMP_DIR / f"{audio_path.stem}_chunk_%04d{ext}")
         
         cmd = [
             FFMPEG_PATH or "ffmpeg",
             "-i", str(audio_path),
             "-f", "segment",
             "-segment_time", str(chunk_seconds),
-            "-c:a", "libmp3lame",
-            "-b:a", "128k",
+            "-c", "copy",
             output_pattern
         ]
         
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            # Find generated chunks
-            chunks = sorted(TEMP_DIR.glob(f"{audio_path.stem}_chunk_*.mp3"))
+            # DEVNULL prevents any stdout/stderr buffer deadlocks
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            chunks = sorted(TEMP_DIR.glob(f"{audio_path.stem}_chunk_*{ext}"))
             return chunks
         except subprocess.CalledProcessError as e:
-            logger.error(f"FFmpeg split failed: {e.stderr.decode('utf-8', errors='ignore')}")
+            logger.error(f"FFmpeg split failed on {audio_path.name}")
             return []
 
     async def generate_metadata_keywords(self, company_name: str, job_id: str) -> str:
