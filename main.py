@@ -291,17 +291,158 @@ class TranscriptionEngine:
                 self.key_usage[best_key]["calls"] += 1
             return best_key
 
+    def _extract_video_id(self, url: str) -> Optional[str]:
+        """Extract YouTube video ID from various URL formats."""
+        import re
+        patterns = [
+            r'(?:youtube\.com/(?:watch\?v=|live/|embed/|shorts/|v/))([a-zA-Z0-9_-]{11})',
+            r'(?:youtu\.be/)([a-zA-Z0-9_-]{11})',
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+        return None
+
+    async def _download_via_proxy(self, video_id: str, job_id: str) -> Optional[Path]:
+        """Download YouTube audio via public Invidious/Piped proxy APIs — bypasses all datacenter IP blocks."""
+        import httpx
+        
+        # Multiple public proxy instances for redundancy
+        invidious_instances = [
+            "https://inv.nadeko.net",
+            "https://invidious.fdn.fr",
+            "https://invidious.perennialte.ch",
+            "https://iv.datura.network",
+            "https://inv.tux.pizza",
+            "https://invidious.protokolla.fi",
+        ]
+        piped_instances = [
+            "https://pipedapi.kavin.rocks",
+            "https://pipedapi.r4fo.com",
+            "https://pipedapi.adminforge.de",
+        ]
+        
+        # Try Invidious first
+        for instance in invidious_instances:
+            try:
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🔄 Trying proxy: {instance.split('//')[1]}..."})
+                async with httpx.AsyncClient(timeout=20, follow_redirects=True, verify=False) as client:
+                    resp = await client.get(f"{instance}/api/v1/videos/{video_id}")
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    
+                    # Find best audio-only stream (adaptive formats)
+                    audio_url = None
+                    best_bitrate = 0
+                    for fmt in data.get("adaptiveFormats", []):
+                        if fmt.get("type", "").startswith("audio/"):
+                            bitrate = fmt.get("bitrate", 0)
+                            if bitrate > best_bitrate:
+                                best_bitrate = bitrate
+                                audio_url = fmt.get("url")
+                    
+                    if not audio_url:
+                        logger.warning(f"No audio streams found via {instance}")
+                        continue
+                    
+                    # Download the audio
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"⬇️ Downloading audio via proxy..."})
+                    audio_resp = await client.get(audio_url, timeout=120)
+                    if audio_resp.status_code == 200 and len(audio_resp.content) > 10000:
+                        # Save raw audio
+                        raw_path = TEMP_DIR / f"{job_id}_raw.webm"
+                        raw_path.write_bytes(audio_resp.content)
+                        
+                        # Convert to mp3
+                        mp3_path = TEMP_DIR / f"{job_id}.mp3"
+                        convert_cmd = [FFMPEG_PATH or "ffmpeg", "-i", str(raw_path), "-codec:a", "libmp3lame", "-b:a", "128k", "-y", str(mp3_path)]
+                        proc = await asyncio.create_subprocess_exec(*convert_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                        await proc.communicate()
+                        raw_path.unlink(missing_ok=True)
+                        
+                        if mp3_path.exists() and mp3_path.stat().st_size > 10000:
+                            await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"✅ Audio downloaded via proxy!"})
+                            return mp3_path
+                        else:
+                            mp3_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Invidious {instance} failed: {e}")
+                continue
+        
+        # Try Piped API
+        for instance in piped_instances:
+            try:
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🔄 Trying Piped proxy: {instance.split('//')[1]}..."})
+                async with httpx.AsyncClient(timeout=20, follow_redirects=True, verify=False) as client:
+                    resp = await client.get(f"{instance}/streams/{video_id}")
+                    if resp.status_code != 200:
+                        continue
+                    data = resp.json()
+                    
+                    # Find audio stream
+                    audio_url = None
+                    for stream in data.get("audioStreams", []):
+                        if stream.get("url"):
+                            audio_url = stream["url"]
+                            break
+                    
+                    if not audio_url:
+                        continue
+                    
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"⬇️ Downloading audio via Piped..."})
+                    audio_resp = await client.get(audio_url, timeout=120)
+                    if audio_resp.status_code == 200 and len(audio_resp.content) > 10000:
+                        raw_path = TEMP_DIR / f"{job_id}_raw.webm"
+                        raw_path.write_bytes(audio_resp.content)
+                        
+                        mp3_path = TEMP_DIR / f"{job_id}.mp3"
+                        convert_cmd = [FFMPEG_PATH or "ffmpeg", "-i", str(raw_path), "-codec:a", "libmp3lame", "-b:a", "128k", "-y", str(mp3_path)]
+                        proc = await asyncio.create_subprocess_exec(*convert_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                        await proc.communicate()
+                        raw_path.unlink(missing_ok=True)
+                        
+                        if mp3_path.exists() and mp3_path.stat().st_size > 10000:
+                            await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"✅ Audio downloaded via Piped!"})
+                            return mp3_path
+                        else:
+                            mp3_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Piped {instance} failed: {e}")
+                continue
+        
+        return None
+
     async def download_audio(self, url: str, job_id: str) -> Optional[Path]:
-        """Download audio from URL using robust backends."""
+        """Download audio from URL using robust multi-backend approach.
+        
+        Strategy for YouTube on cloud:
+        1. Invidious/Piped proxy APIs (bypasses ALL datacenter IP blocks)
+        2. pytubefix (direct API, sometimes works)
+        3. yt-dlp with cookies (last resort)
+        """
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "📥 Downloading audio from URL..."})
         
         is_youtube = "youtube.com" in url.lower() or "youtu.be" in url.lower()
+        is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
+        
+        # ═══ CLOUD YOUTUBE: Proxy-first approach ═══
+        if is_youtube and is_cloud:
+            video_id = self._extract_video_id(url)
+            if video_id:
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "🌐 Using proxy bypass for YouTube (cloud mode)..."})
+                result = await self._download_via_proxy(video_id, job_id)
+                if result:
+                    return result
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "⚠️ All proxies failed, trying direct methods..."})
+        
+        # ═══ PYTUBEFIX (works locally, sometimes on cloud) ═══
         if is_youtube:
             try:
                 from pytubefix import YouTube
                 def _download_pytube():
                     yt = YouTube(url, client='WEB')
-                    # Prefer lowest bitrate audio-only to save massive bandwidth/time since Whisper compresses to 16k anyway
                     stream = yt.streams.filter(only_audio=True).order_by('abr').first()
                     if stream:
                         return stream.download(output_path=str(TEMP_DIR), filename=f"{job_id}.mp4")
@@ -322,11 +463,10 @@ class TranscriptionEngine:
                         pass
                     return mp3_path
             except Exception as e:
-                logger.warning(f"Primary Pytubefix download failed, falling back to yt-dlp: {e}")
+                logger.warning(f"Pytubefix download failed: {e}")
                 
+        # ═══ YT-DLP (last resort, works great locally) ═══
         try:
-            is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
-            
             cmd = [sys.executable]
             if is_cloud:
                 cmd.append(str(BASE_DIR / "ytdlp_bypass.py"))
@@ -338,19 +478,18 @@ class TranscriptionEngine:
                 "-x", "--audio-format", "mp3",
                 "--audio-quality", "128K",
                 "--no-playlist",
-                "--force-ipv4",         # Fixes DNS/VPN networking errors ([Errno -5])
-                "--geo-bypass",         # Auto-bypasses basic regional restrictions
-                "--add-header", "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", # Bypasses basic bot checks
+                "--force-ipv4",
+                "--geo-bypass",
+                "--add-header", "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "--socket-timeout", "30",
-                "--extractor-args", "youtube:player_client=android,web,tv", # Broad client cascade for heavy Live Stream authentication fallback
+                "--extractor-args", "youtube:player_client=android,web,tv",
                 "--js-runtimes", "node",
-                "--remote-components", "ejs:github", # Required by new YouTube bot-solver
+                "--remote-components", "ejs:github",
             ])
             
-            # Apply Youtube cookies if provided in settings or use hardcoded master fallback
+            # Apply cookies
             cookies_content = settings_manager.settings.get("youtube_cookies", "").strip()
-            if not cookies_content:
-                # User's permanent master cookies for cloud bypass (updated 2026-02-25)
+            if not cookies_content and is_youtube:
                 cookies_content = """# Netscape HTTP Cookie File
 # https://curl.haxx.se/rfc/cookie_spec.html
 # This is a generated file! Do not edit.
@@ -404,7 +543,6 @@ class TranscriptionEngine:
                 except Exception:
                     pass
             
-            # Log yt-dlp output for debugging
             stderr_text = stderr.decode(errors='replace').strip()
             stdout_text = stdout.decode(errors='replace').strip()
             if stderr_text:
@@ -416,7 +554,6 @@ class TranscriptionEngine:
             for f in TEMP_DIR.iterdir():
                 if f.stem == job_id and f.suffix in ['.mp3', '.m4a', '.wav', '.webm', '.opus']:
                     if f.suffix != '.mp3':
-                        # Convert to mp3
                         mp3_path = f.with_suffix('.mp3')
                         convert_cmd = [FFMPEG_PATH or "ffmpeg", "-i", str(f), "-codec:a", "libmp3lame", "-b:a", "128k", str(mp3_path)]
                         proc = await asyncio.create_subprocess_exec(*convert_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -425,23 +562,20 @@ class TranscriptionEngine:
                         return mp3_path
                     return f
             
-            # Show the actual error to the user
+            # Error reporting
             error_hint = ""
             stderr_lower = stderr_text.lower()
-            if "is_live" in stderr_lower or "live event" in stderr_lower or "this live event will begin" in stderr_lower:
+            if "is_live" in stderr_lower or "live event" in stderr_lower:
                 error_hint = " This appears to be an active live stream — try again after it ends."
             elif "private" in stderr_lower:
                 error_hint = " This video appears to be private or restricted."
             elif "unavailable" in stderr_lower or "not available" in stderr_lower:
                 error_hint = " This video is unavailable in this region or has been removed."
-            elif "sign in" in stderr_lower or "age restrict" in stderr_lower or "verify your age" in stderr_lower:
+            elif "sign in" in stderr_lower or "age restrict" in stderr_lower:
                 error_hint = " This video requires sign-in or age verification."
-            elif "no supported javascript" in stderr_lower or "js runtime" in stderr_lower:
-                error_hint = " yt-dlp needs a JavaScript runtime (Node.js). Server may need updating."
-            elif "no address associated with hostname" in stderr_lower or "name or service not known" in stderr_lower or "network is unreachable" in stderr_lower:
-                error_hint = " Network error: Could not reach YouTube. Check your internet connection or DNS."
+            elif "no address associated" in stderr_lower or "network is unreachable" in stderr_lower:
+                error_hint = " Network error: Could not reach YouTube."
             
-            # Show last line of stderr for debugging
             last_err = stderr_text.split('\n')[-1][:150] if stderr_text else "No output from yt-dlp"
             await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download failed.{error_hint} ({last_err})"})
             logger.error(f"Download failed for {url}. Exit: {process.returncode}. stderr: {stderr_text[-500:]}")
@@ -449,8 +583,6 @@ class TranscriptionEngine:
         except Exception as e:
             await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download error: {str(e)}"})
             logger.error(f"Download error: {e}")
-            
-            # Clean up temp cookies file on crash
             cookies_file = TEMP_DIR / f"{job_id}_cookies.txt"
             if cookies_file.exists():
                 try:
