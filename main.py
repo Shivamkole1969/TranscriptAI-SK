@@ -23,6 +23,8 @@ from typing import Optional, List, Dict
 from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 
+import uvicorn
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
