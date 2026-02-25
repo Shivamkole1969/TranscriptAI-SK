@@ -295,8 +295,9 @@ class TranscriptionEngine:
             try:
                 from pytubefix import YouTube
                 def _download_pytube():
-                    yt = YouTube(url)
-                    stream = yt.streams.filter(only_audio=True).first()
+                    yt = YouTube(url, client='WEB')
+                    # Prefer lowest bitrate audio-only to save massive bandwidth/time since Whisper compresses to 16k anyway
+                    stream = yt.streams.filter(only_audio=True).order_by('abr').first()
                     if stream:
                         return stream.download(output_path=str(TEMP_DIR), filename=f"{job_id}.mp4")
                     return None
