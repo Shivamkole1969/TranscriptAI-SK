@@ -742,6 +742,9 @@ function applySettings() {
 
     const dialectSelect = document.getElementById('settingDialect');
     if (dialectSelect) dialectSelect.value = AppState.settings.english_dialect || 'indian';
+
+    const cookiesInput = document.getElementById('settingYoutubeCookies');
+    if (cookiesInput) cookiesInput.value = AppState.settings.youtube_cookies || '';
 }
 
 async function updateSetting(key, value) {

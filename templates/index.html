@@ -531,6 +531,16 @@
                             <p class="form-hint">Helps Whisper adapt to accent-specific pronunciations.</p>
                         </div>
                     </div>
+                    <div class="form-group mt-4">
+                        <label class="form-label">YouTube Cookies (Bypass Bot/Age Restrictions)</label>
+                        <textarea class="form-textarea" id="settingYoutubeCookies" rows="3"
+                            placeholder="# Netscape HTTP Cookie File...\nPaste your exported YouTube cookies.txt contents here"
+                            onchange="updateSetting('youtube_cookies', this.value)"
+                            style="font-family: 'JetBrains Mono', monospace; font-size: 11px;"></textarea>
+                        <p class="form-hint">Install the "Get cookies.txt LOCALLY" Chrome extension, export your YouTube
+                            cookies, and paste them here to bypass the "Sign in to confirm you're not a bot" datacenter
+                            error.</p>
+                    </div>
                 </div>
 
                 <!-- Speed Calculator / Recommendation Guide -->

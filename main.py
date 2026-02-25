@@ -312,9 +312,21 @@ class TranscriptionEngine:
                 "--extractor-args", "youtube:player_client=android", # Bypasses the aggressive bot sign-in lock
                 "--js-runtimes", "node",
                 "--remote-components", "ejs:github", # Required by new YouTube bot-solver
+            ])
+            
+            # Apply Youtube cookies if provided in settings
+            cookies_content = settings_manager.settings.get("youtube_cookies", "").strip()
+            cookies_file = TEMP_DIR / f"{job_id}_cookies.txt"
+            if cookies_content:
+                with open(cookies_file, "w") as f:
+                    f.write(cookies_content)
+                cmd.extend(["--cookies", str(cookies_file)])
+                
+            cmd.extend([
                 "-o", str(TEMP_DIR / f"{job_id}.%(ext)s"),
                 url
             ])
+            
             if FFMPEG_PATH:
                 cmd.extend(["--ffmpeg-location", str(Path(FFMPEG_PATH).parent)])
             
@@ -324,6 +336,13 @@ class TranscriptionEngine:
                 stderr=asyncio.subprocess.PIPE
             )
             stdout, stderr = await process.communicate()
+            
+            # Clean up temp cookies file
+            if cookies_file.exists():
+                try:
+                    cookies_file.unlink()
+                except Exception:
+                    pass
             
             # Log yt-dlp output for debugging
             stderr_text = stderr.decode(errors='replace').strip()
@@ -370,6 +389,14 @@ class TranscriptionEngine:
         except Exception as e:
             await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": f"❌ Download error: {str(e)}"})
             logger.error(f"Download error: {e}")
+            
+            # Clean up temp cookies file on crash
+            cookies_file = TEMP_DIR / f"{job_id}_cookies.txt"
+            if cookies_file.exists():
+                try:
+                    cookies_file.unlink()
+                except Exception:
+                    pass
             return None
 
     def split_audio(self, audio_path: Path, chunk_minutes: int = 10) -> List[Path]:
