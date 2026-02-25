@@ -414,20 +414,73 @@ class TranscriptionEngine:
         
         return None
 
+    async def _download_via_rapidapi(self, video_id: str, job_id: str, api_key: str) -> Optional[Path]:
+        """Download using a free RapidAPI (youtube-mp36) to bypass all IP blocks."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                headers = {
+                    "x-rapidapi-key": api_key,
+                    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+                }
+                resp = await client.get(f"https://youtube-mp36.p.rapidapi.com/dl?id={video_id}", headers=headers)
+                if resp.status_code != 200:
+                    logger.warning(f"RapidAPI returned {resp.status_code}: {resp.text}")
+                    return None
+                    
+                data = resp.json()
+                dl_url = data.get("link")
+                
+                # Some APIs take a moment to process the mp3
+                if not dl_url and data.get("msg") == "in progress":
+                    for _ in range(15):
+                        await asyncio.sleep(2)
+                        resp = await client.get(f"https://youtube-mp36.p.rapidapi.com/dl?id={video_id}", headers=headers)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if data.get("link"):
+                                dl_url = data.get("link")
+                                break
+                                
+                if dl_url:
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"⬇️ Downloading MP3 via RapidAPI..."})
+                    audio_resp = await client.get(dl_url, timeout=120, follow_redirects=True)
+                    if audio_resp.status_code == 200 and len(audio_resp.content) > 10000:
+                        mp3_path = TEMP_DIR / f"{job_id}.mp3"
+                        mp3_path.write_bytes(audio_resp.content)
+                        await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"✅ Audio downloaded via RapidAPI!"})
+                        return mp3_path
+        except Exception as e:
+            logger.warning(f"RapidAPI failed: {e}")
+        return None
+
     async def download_audio(self, url: str, job_id: str) -> Optional[Path]:
         """Download audio from URL using robust multi-backend approach.
         
         Strategy for YouTube on cloud:
-        1. Invidious/Piped proxy APIs (bypasses ALL datacenter IP blocks)
-        2. pytubefix (direct API, sometimes works)
-        3. yt-dlp with cookies (last resort)
+        1. RapidAPI (if key provided in settings - 100% reliable)
+        2. Invidious/Piped proxy APIs (bypasses ALL datacenter IP blocks)
+        3. pytubefix (direct API, sometimes works)
+        4. yt-dlp with cookies (last resort)
         """
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "📥 Downloading audio from URL..."})
         
         is_youtube = "youtube.com" in url.lower() or "youtu.be" in url.lower()
         is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
         
-        # ═══ CLOUD YOUTUBE: Proxy-first approach ═══
+        # ═══ 1. RAPIDAPI (If provided, bypasses all blocks) ═══
+        if is_youtube:
+            rapidapi_key = settings_manager.settings.get("rapidapi_key", "").strip()
+            if rapidapi_key:
+                video_id = self._extract_video_id(url)
+                if video_id:
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "🚀 Using RapidAPI for guaranteed YouTube bypass..."})
+                    result = await self._download_via_rapidapi(video_id, job_id, rapidapi_key)
+                    if result:
+                        return result
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "⚠️ RapidAPI failed or quota exceeded, continuing to fallback methods..."})
+
+        # ═══ 2. CLOUD YOUTUBE: Public Proxies ═══
         if is_youtube and is_cloud:
             video_id = self._extract_video_id(url)
             if video_id:
@@ -435,7 +488,7 @@ class TranscriptionEngine:
                 result = await self._download_via_proxy(video_id, job_id)
                 if result:
                     return result
-                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "⚠️ All proxies failed, trying direct methods..."})
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "⚠️ All public proxies failed, trying direct methods..."})
         
         # ═══ PYTUBEFIX (works locally, sometimes on cloud) ═══
         if is_youtube:
