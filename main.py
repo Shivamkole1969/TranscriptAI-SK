@@ -287,8 +287,37 @@ class TranscriptionEngine:
             return best_key
 
     async def download_audio(self, url: str, job_id: str) -> Optional[Path]:
-        """Download audio from URL using yt-dlp."""
+        """Download audio from URL using robust backends."""
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "📥 Downloading audio from URL..."})
+        
+        is_youtube = "youtube.com" in url.lower() or "youtu.be" in url.lower()
+        if is_youtube:
+            try:
+                from pytubefix import YouTube
+                def _download_pytube():
+                    yt = YouTube(url)
+                    stream = yt.streams.filter(only_audio=True).first()
+                    if stream:
+                        return stream.download(output_path=str(TEMP_DIR), filename=f"{job_id}.mp4")
+                    return None
+                    
+                loop = asyncio.get_event_loop()
+                audio_file = await loop.run_in_executor(None, _download_pytube)
+                
+                if audio_file:
+                    audio_path = Path(audio_file)
+                    mp3_path = audio_path.with_suffix('.mp3')
+                    convert_cmd = [FFMPEG_PATH or "ffmpeg", "-i", str(audio_path), "-codec:a", "libmp3lame", "-b:a", "128k", "-y", str(mp3_path)]
+                    proc = await asyncio.create_subprocess_exec(*convert_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                    await proc.communicate()
+                    try:
+                        audio_path.unlink(missing_ok=True)
+                    except:
+                        pass
+                    return mp3_path
+            except Exception as e:
+                logger.warning(f"Primary Pytubefix download failed, falling back to yt-dlp: {e}")
+                
         try:
             is_cloud = os.environ.get("RENDER") == "true" or os.environ.get("SPACE_ID") is not None
             ytdlp_engine = str(BASE_DIR / "ytdlp_bypass.py") if is_cloud else "-m"
