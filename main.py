@@ -73,6 +73,11 @@ def setup_ffmpeg():
     if ffmpeg_sys:
         os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_sys
         return ffmpeg_sys
+    # Fallback: check common macOS/Linux install locations (pywebview/app bundles don't inherit shell PATH)
+    for fallback in ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg", "/usr/bin/ffmpeg"]:
+        if Path(fallback).exists():
+            os.environ["IMAGEIO_FFMPEG_EXE"] = fallback
+            return fallback
     return None
 
 FFMPEG_PATH = setup_ffmpeg()
