@@ -592,20 +592,30 @@ class TranscriptionEngine:
             return None
 
     def split_audio(self, audio_path: Path, chunk_minutes: int = 10) -> List[Path]:
-        """Split audio into chunks using pydub."""
-        from pydub import AudioSegment
+        """Split audio into chunks using FFmpeg for speed and memory efficiency."""
+        import subprocess
         
-        audio = AudioSegment.from_file(str(audio_path))
-        chunk_ms = chunk_minutes * 60 * 1000
-        chunks = []
+        chunk_seconds = chunk_minutes * 60
+        output_pattern = str(TEMP_DIR / f"{audio_path.stem}_chunk_%04d.mp3")
         
-        for i in range(0, len(audio), chunk_ms):
-            chunk = audio[i:i + chunk_ms]
-            chunk_path = TEMP_DIR / f"{audio_path.stem}_chunk_{i // chunk_ms:04d}.mp3"
-            chunk.export(str(chunk_path), format="mp3", bitrate="128k")
-            chunks.append(chunk_path)
+        cmd = [
+            FFMPEG_PATH or "ffmpeg",
+            "-i", str(audio_path),
+            "-f", "segment",
+            "-segment_time", str(chunk_seconds),
+            "-c:a", "libmp3lame",
+            "-b:a", "128k",
+            output_pattern
+        ]
         
-        return chunks
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Find generated chunks
+            chunks = sorted(TEMP_DIR.glob(f"{audio_path.stem}_chunk_*.mp3"))
+            return chunks
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg split failed: {e.stderr.decode('utf-8', errors='ignore')}")
+            return []
 
     async def generate_metadata_keywords(self, company_name: str, job_id: str) -> str:
         """Fetch highly specific metadata keywords about a company from Groq directly to aid Whisper."""
