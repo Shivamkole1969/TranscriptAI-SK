@@ -656,6 +656,52 @@ class TranscriptionEngine:
             logger.error(f"Failed to generate metadata keywords: {e}")
             return ""
 
+    def smart_format_chunk_sync(self, text: str, company_name: str, context_keywords: str, api_key: str) -> str:
+        """Intelligently identify speakers and format dialogue using Llama 3 70B."""
+        import httpx
+        system_prompt = (
+            f"You are an elite transcription editor for the '{company_name}' meeting. "
+            "You are given a raw transcript segment from Whisper. Your task is to intelligently identify the actual Speaker names "
+            "based on introductions, context, and the provided key executive names. "
+            "Replace generic 'Speaker 1:' tags or unlabelled text with their actual names in bold, e.g., **Tim Cook:** \n"
+            "Format the dialogue beautifully as an official corporate PDF transcript.\n"
+            "CRITICAL RULES: \n"
+            "1. Do NOT summarize or omit any spoken text. Output the FULL transcript exactly as spoken.\n"
+            "2. Do not add any extra commentary, introductory text, or pleasantries like 'Here is the transcript'. "
+            "Output ONLY the perfectly formatted transcript."
+        )
+        user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
+        
+        for attempt in range(3):
+            try:
+                verify = str(cert_path) if cert_path.exists() else True
+                response = httpx.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.1
+                    },
+                    timeout=120,
+                    verify=verify
+                )
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get('retry-after', 5))
+                    time.sleep(retry_after)
+                    continue
+                if response.status_code == 200:
+                    return response.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.debug(f"Smart format error: {e}")
+                time.sleep(2)
+        return text
+
+
+
     def transcribe_chunk(self, chunk_path: Path, api_key: str, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
         """Transcribe a single audio chunk using Groq API."""
         import httpx
@@ -813,6 +859,12 @@ class TranscriptionEngine:
             if not key:
                 return idx, {"text": "[ERROR: No API key available]", "error": True}
             result = self.transcribe_chunk(chunk_path, key, model, keywords)
+            
+            # SMART DIARIZATION PASS
+            if result.get("text") and not result.get("error"):
+                formatted_text = self.smart_format_chunk_sync(result["text"], company_name, keywords, key)
+                result["text"] = formatted_text
+                
             return idx, result
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -1360,6 +1412,18 @@ if __name__ == "__main__":
             server_thread.start()
             time.sleep(1)
             icon_path = str(BASE_DIR / "static" / "logo.png")
+            
+            import sys
+            if sys.platform == "darwin":
+                try:
+                    from AppKit import NSApplication, NSImage
+                    app_inst = NSApplication.sharedApplication()
+                    img = NSImage.alloc().initWithContentsOfFile_(icon_path)
+                    if img:
+                        app_inst.setApplicationIconImage_(img)
+                except Exception as e:
+                    logger.debug(f"macOS dock icon set failed: {e}")
+            
             webview.create_window("AI Transcriptor by Shivam Kole", f"http://127.0.0.1:{port}", width=1400, height=900)
             webview.start(icon=icon_path)
         except ImportError:
