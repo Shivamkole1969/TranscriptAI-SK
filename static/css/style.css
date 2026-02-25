@@ -64,34 +64,34 @@
 /* ── Light Mode (soothing sky blue) ────────────────────────────── */
 [data-theme="light"] {
     /* Core palette — soft sky blue tones */
-    --bg-primary: #e8f0f8;
-    --bg-secondary: #dce7f2;
-    --bg-tertiary: #d0dded;
-    --bg-card: rgba(255, 255, 255, 0.75);
-    --bg-card-hover: rgba(255, 255, 255, 0.9);
-    --bg-elevated: #c8d8e8;
+    --bg-primary: #f0f9ff;
+    --bg-secondary: #e0f2fe;
+    --bg-tertiary: #bae6fd;
+    --bg-card: #ffffff;
+    --bg-card-hover: rgba(255, 255, 255, 0.95);
+    --bg-elevated: #e0f2fe;
 
-    /* Accent colors (slightly deeper for contrast) */
-    --accent-primary: #2563eb;
-    --accent-secondary: #4f46e5;
-    --accent-glow: rgba(37, 99, 235, 0.2);
-    --accent-gradient: linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%);
-    --accent-gradient-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(79, 70, 229, 0.1) 100%);
+    /* Accent colors (sky blue) */
+    --accent-primary: #0ea5e9;
+    --accent-secondary: #0284c7;
+    --accent-glow: rgba(14, 165, 233, 0.25);
+    --accent-gradient: linear-gradient(135deg, #0ea5e9 0%, #0284c7 50%, #3b82f6 100%);
+    --accent-gradient-soft: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(2, 132, 199, 0.1) 100%);
 
     /* Text — dark text on light background */
-    --text-primary: #1e293b;
-    --text-secondary: #475569;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
     --text-muted: #64748b;
-    --text-accent: #2563eb;
+    --text-accent: #0284c7;
 
     /* Borders & Shadows */
-    --border-color: rgba(148, 163, 184, 0.2);
-    --border-color-hover: rgba(148, 163, 184, 0.35);
-    --shadow-sm: 0 1px 2px rgba(100, 116, 139, 0.08);
-    --shadow-md: 0 4px 12px rgba(100, 116, 139, 0.1);
-    --shadow-lg: 0 8px 30px rgba(100, 116, 139, 0.15);
-    --shadow-xl: 0 20px 60px rgba(100, 116, 139, 0.18);
-    --shadow-glow: 0 0 30px rgba(37, 99, 235, 0.1);
+    --border-color: rgba(14, 165, 233, 0.15);
+    --border-color-hover: rgba(14, 165, 233, 0.3);
+    --shadow-sm: 0 1px 2px rgba(14, 165, 233, 0.05);
+    --shadow-md: 0 4px 12px rgba(14, 165, 233, 0.08);
+    --shadow-lg: 0 8px 30px rgba(14, 165, 233, 0.12);
+    --shadow-xl: 0 20px 60px rgba(14, 165, 233, 0.15);
+    --shadow-glow: 0 0 30px rgba(14, 165, 233, 0.12);
 }
 
 /* Light mode overrides for specific elements */
@@ -258,7 +258,7 @@ html {
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     background: var(--bg-primary);
     color: var(--text-primary);
     min-height: 100vh;
@@ -529,8 +529,8 @@ body::before {
 /* ── Main Content ──────────────────────────────────────────────── */
 .main-content {
     flex: 1;
-    padding: 24px;
-    max-width: 1400px;
+    padding: 40px;
+    max-width: 1600px;
     margin: 0 auto;
     width: 100%;
 }
@@ -561,7 +561,7 @@ body::before {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
-    padding: 24px;
+    padding: 32px;
     transition: all var(--transition-normal);
     position: relative;
     overflow: hidden;
@@ -785,8 +785,8 @@ body::before {
 /* ── Transcription Section ─────────────────────────────────────── */
 .transcription-layout {
     display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 20px;
+    grid-template-columns: 1fr 440px;
+    gap: 32px;
     align-items: start;
 }
 
