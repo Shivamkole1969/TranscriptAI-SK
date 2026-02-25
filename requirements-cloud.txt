@@ -8,7 +8,8 @@ aiofiles==23.2.1
 httpx==0.25.2
 groq==0.4.2
 pydub==0.25.1
-yt-dlp>=2024.3.10
+yt-dlp==2026.2.21
+pytubefix==10.3.8
 fpdf2==2.7.6
 imageio-ffmpeg==0.4.9
 aiohttp==3.9.1
