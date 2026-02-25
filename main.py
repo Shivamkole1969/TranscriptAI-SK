@@ -806,33 +806,31 @@ class TranscriptionEngine:
 
         # Parallel transcription
         results = [None] * total_chunks
-        completed = [0]
+        completed_count = 0
 
         def process_chunk(idx, chunk_path):
             key = self._get_next_key(all_keys)
             if not key:
                 return idx, {"text": "[ERROR: No API key available]", "error": True}
             result = self.transcribe_chunk(chunk_path, key, model, keywords)
-            completed[0] += 1
             return idx, result
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-            for i, chunk in enumerate(chunks):
-                futures.append(executor.submit(process_chunk, i, chunk))
+            tasks = [
+                loop.run_in_executor(executor, process_chunk, i, chunk)
+                for i, chunk in enumerate(chunks)
+            ]
             
-            for future in futures:
-                idx, result = future.result()
+            for coro in asyncio.as_completed(tasks):
+                idx, result = await coro
                 results[idx] = result
-                progress = int(5 + (completed[0] / total_chunks) * 85)
-                asyncio.run_coroutine_threadsafe(
-                    ws_manager.broadcast({
-                        "type": "progress", "job_id": job_id,
-                        "progress": progress,
-                        "message": f"🔄 Processed chunk {completed[0]}/{total_chunks}..."
-                    }),
-                    loop
-                )
+                completed_count += 1
+                progress = int(5 + (completed_count / total_chunks) * 85)
+                await ws_manager.broadcast({
+                    "type": "progress", "job_id": job_id,
+                    "progress": progress,
+                    "message": f"🔄 Processed chunk {completed_count}/{total_chunks}..."
+                })
 
         # Combine results
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "📝 Combining and formatting transcript..."})
