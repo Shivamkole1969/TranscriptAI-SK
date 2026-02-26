@@ -140,7 +140,7 @@ class SettingsManager:
             "free_api_keys": [],
             "default_model": "whisper-large-v3",
             "llm_model": "llama-3.3-70b-versatile",
-            "chunk_duration_minutes": 10,
+            "chunk_duration_minutes": 20,
             "max_parallel_workers": 20,
             "output_format": "both",
             "speaker_detection": True,
@@ -873,7 +873,7 @@ class TranscriptionEngine:
             return {"error": "No API keys configured"}
 
         model = settings_manager.settings.get("default_model", "whisper-large-v3")
-        chunk_minutes = settings_manager.settings.get("chunk_duration_minutes", 10)
+        chunk_minutes = max(20, settings_manager.settings.get("chunk_duration_minutes", 20))
         
         # Absolute 1-to-1 matching: Prevent 20 workers from brutally hitting 8 keys concurrently
         max_workers = len(all_keys)
