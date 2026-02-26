@@ -719,11 +719,12 @@ class TranscriptionEngine:
             "Your task is to identify the precise speaker for each segment based on context, flow, and provided keywords.\n"
             "CRITICAL RULES:\n"
             "1. You MUST return your response ONLY as a JSON object with a single key 'speaker_changes'.\n"
-            "2. 'speaker_changes' must be a list of objects containing 'id' (the integer ID where a NEW speaker begins) and 'speaker' (their deduced true name).\n"
+            "2. 'speaker_changes' must be a list of objects containing 'id' (the integer ID where a NEW speaker begins) and 'speaker' (their deduced true name AND their corporate designation/title).\n"
             "3. If the speaker does not change between consecutive IDs, do NOT add a new entry for every ID. Only add an entry when the speaker visibly CHANGES.\n"
-            "4. NEVER invent or write actual dialogue. Just map the changes.\n"
-            "5. Example output:\n"
-            '{"speaker_changes": [{"id": 0, "speaker": "Host"}, {"id": 12, "speaker": "CEO Name"}]}'
+            "4. IMPORTANT: If you recognize the speaker as a prominent executive for this company, append their exact title in parentheses, eg: 'Tim Cook (CEO)'. If you are not 100% sure of their title, do NOT hallucinate one.\n"
+            "5. NEVER invent or write actual dialogue. Just map the changes.\n"
+            "6. Example output:\n"
+            '{"speaker_changes": [{"id": 0, "speaker": "Host"}, {"id": 12, "speaker": "Sanjiv Bajaj (Chairman & Managing Director)"}]}'
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nTranscript Segment:\n{raw_text_to_process}"
         
@@ -892,8 +893,7 @@ class TranscriptionEngine:
                         'model': model,
                         'language': 'en',
                         'response_format': 'verbose_json',
-                        'prompt': final_prompt,
-                        'temperature': '0'  # Forces strictly deterministic, fully accurate reading and heavily limits hallucination loops
+                        'prompt': final_prompt
                     }
                     
                     verify = str(cert_path) if cert_path.exists() else True
@@ -932,6 +932,12 @@ class TranscriptionEngine:
                         time.sleep(random.uniform(0.5, 2.0))
                         attempt += 1
                         continue
+                        
+                    elif response.status_code == 400:
+                        # 400 usually means Whispers hit a "0 bytes valid media" mark (100% dead silence chunk)
+                        # We return empty so it doesn't infinite loop, but we don't crash.
+                        logger.debug(f"Audio chunk 400 silent/empty limit hit on attempt {attempt}.")
+                        return {"text": "", "segments": []}
                     
                     response.raise_for_status()
                     return response.json()
