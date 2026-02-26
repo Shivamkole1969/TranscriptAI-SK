@@ -617,9 +617,13 @@ async function addAPIKeys(type) {
     // Summary toast
     const parts = [];
     if (added > 0) parts.push(`✅ ${added} added`);
-    if (skipped > 0) parts.push(`⏭️ ${skipped} duplicates skipped`);
     if (failed > 0) parts.push(`❌ ${failed} invalid`);
     showToast(added > 0 ? 'success' : 'warning', parts.join(' • '));
+
+    // Explicit warning popup if duplicates were found
+    if (skipped > 0) {
+        alert(`⚠️ Duplicate API Key Detected!\n\nWe noticed you pasted ${skipped} duplicate API key(s) that were already in the system. To prevent parallel crashing, these duplicates have been automatically removed from your entry.`);
+    }
 }
 
 async function removeAPIKey(type, index) {
@@ -714,14 +718,14 @@ async function loadSettings() {
 
         let shouldSaveSettings = false;
 
-        // ─── LocalStorage Key Recovery (12 Hours) ───
+        // ─── LocalStorage Key Recovery (48 Hours) ───
         const cachedStr = localStorage.getItem('cached_api_keys');
         if (cachedStr) {
             try {
                 const cache = JSON.parse(cachedStr);
-                const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+                const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000;
 
-                if (Date.now() - cache.timestamp <= TWELVE_HOURS) {
+                if (Date.now() - cache.timestamp <= FORTY_EIGHT_HOURS) {
                     // Cache is valid. Forcefully restore these keys, merging with any existing backend keys
                     const currentPaid = serverSettings.paid_api_keys || [];
                     const currentFree = serverSettings.free_api_keys || [];
