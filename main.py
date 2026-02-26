@@ -667,10 +667,10 @@ class TranscriptionEngine:
             "CRITICAL RULES: \n"
             "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their name (e.g. '[SPEAKER] Tim Cook'). \n"
             "2. On the immediate next line, output '[TITLE]' followed by their Title/Company (e.g. '[TITLE] CEO | Apple'). If unclear, use '[TITLE] Speaker'.\n"
-            "3. Then output their spoken text on the following lines.\n"
-            "4. Do NOT summarize, cut, or omit any spoken words. output EVERY single word from the raw transcript.\n"
-            "5. Do NOT add extra commentary.\n"
-            "6. The raw transcript may NOT have speaker tags. It is YOUR job to deduce when a new person starts speaking based on introductions, questions, or dialogue flow."
+            "3. Output THEIR EXACT SPOKEN TEXT on the following lines.\n"
+            "4. FATAL RULE: You MUST output EVERY SINGLE WORD from the raw transcript. DO NOT summarize. DO NOT skip sentences. DO NOT truncate. You must return 100% of the original text word-for-word, only injecting the [SPEAKER] and [TITLE] markers where the person changes.\n"
+            "5. The raw transcript may NOT have speaker tags. Deduce when a new person starts speaking based on context.\n"
+            "6. DO NOT add any extra commentary or introductory text."
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
@@ -691,9 +691,10 @@ class TranscriptionEngine:
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
                         ],
-                        "temperature": 0.1
+                        "temperature": 0.05,
+                        "max_tokens": 8000
                     },
-                    timeout=120,
+                    timeout=180,
                     verify=verify
                 )
                 if response.status_code == 429:
