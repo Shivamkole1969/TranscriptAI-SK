@@ -662,19 +662,25 @@ class TranscriptionEngine:
             logger.error(f"FFmpeg split failed on {audio_path.name}")
             return []
 
-    async def generate_metadata_keywords(self, company_name: str, job_id: str) -> str:
-        """Fetch highly specific metadata keywords about a company from Groq directly to aid Whisper."""
+    async def generate_metadata_keywords(self, company_name: str, job_id: str) -> dict:
+        """Fetch separate keyword sets for Whisper (technical) and Llama (contextual)."""
         if not company_name or company_name.lower() in ["meeting", "test", "demo", ""]:
-            return ""
+            return {"whisper": "", "llama": ""}
             
         all_keys = settings_manager.get_all_keys()
         if not all_keys:
-            return ""
+            return {"whisper": "", "llama": ""}
             
         key = all_keys[0]
         import httpx
         
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🔍 AI Agent: Generating context/speaker keywords for '{company_name}'..."})
+        
+        system_prompt = (
+            "You are a corporate research AI. Your response must be a JSON object with two keys:\n"
+            "1. 'whisper': A comma-separated list of ONLY technical financial terms and industry jargon. NO PEOPLE NAMES.\n"
+            "2. 'llama': A comma-separated list including key executives, product names, and full company context."
+        )
         
         try:
             response = httpx.post(
@@ -683,23 +689,26 @@ class TranscriptionEngine:
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [
-                        {"role": "system", "content": "You are a corporate research AI. Output ONLY a comma-separated list of keywords. No prologue, no extra text."},
-                        {"role": "user", "content": f"I am about to transcribe a business meeting/call titled '{company_name}'. Generate EXACTLY 10 to 15 highly specific keywords. Specifically include: key executives, major products, and financial terms related to this company. Only give the comma-separated words so I can feed them to Whisper."}
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Research project: '{company_name}'. Provide technical keywords and full context roster for transcription assistance."}
                     ],
+                    "response_format": {"type": "json_object"},
                     "temperature": 0.2
                 },
                 timeout=20,
                 verify=str(cert_path) if cert_path.exists() else True
             )
             if response.status_code == 200:
-                content = response.json()["choices"][0]["message"]["content"].strip()
-                # Clean up any bullet points or newlines if the AI hallucinated formatting
-                content = content.replace("\n", ", ").replace("- ", "").replace("*", "")
-                return content
-            return ""
+                data = response.json().get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                parsed = json.loads(data)
+                return {
+                    "whisper": parsed.get("whisper", ""),
+                    "llama": parsed.get("llama", "")
+                }
+            return {"whisper": "", "llama": ""}
         except Exception as e:
             logger.error(f"Failed to generate metadata keywords: {e}")
-            return ""
+            return {"whisper": "", "llama": ""}
 
     def smart_format_chunk_sync(self, segments_data: list, job_id: str, company_name: str, context_keywords: str, all_keys: list) -> str:
         """Intelligently identify speakers and format dialogue without dropping a single word."""
@@ -902,7 +911,7 @@ class TranscriptionEngine:
                         'language': 'en',
                         'response_format': 'verbose_json',
                         'prompt': final_prompt,
-                        'temperature': '0'  # Forces strictly deterministic, fully accurate reading and heavily limits hallucination loops
+                        'temperature': 0.0  # STRICT deterministic float (forces factual path)
                     }
                     
                     verify = str(cert_path) if cert_path.exists() else True
@@ -981,16 +990,23 @@ class TranscriptionEngine:
         for pattern, replacement in financial_fixes.items():
             text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
             
-        # Hard-delete any instances where Whisper hallucinated the internal system prompt
-        hallucination_str1 = "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
-        hallucination_str2 = "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue"
-        hallucination_str3 = "Hello, welcome! This is a highly accurate, grammatically correct, and fully punctuated transcript of the professional financial presentation."
-        text = text.replace(hallucination_str1, "").replace(hallucination_str2, "").replace(hallucination_str3, "")
-        
+        # Aggressive Scrubber for Hallucinations
+        # Pattern 1: Any variation of the system prompt injected into text
+        scrub_patterns = [
+            r"Lakh,\s*Crore,\s*EBITDA,\s*YoY,\s*QoQ,\s*PAT,\s*Margins,\s*Revenue\.?",
+            r"Hello,\s*welcome!\s*This\s*is\s*a\s*highly\s*accurate.*?financial\s*presentation\.?",
+            r"\[ID:\s*\d+\]\s*{time:\s*\[\d+:\d+:\d+\]}", # Residual tags if any leaked
+        ]
+        for p in scrub_patterns:
+            text = re.sub(p, "", text, flags=re.IGNORECASE)
+            
         if context_keywords:
-            text = text.replace(context_keywords, "")
-            # Sometimes it adds a trailing comma or space
-            text = text.replace(f"{context_keywords},", "").replace(f"{context_keywords}.", "")
+            # Only remove the actual context string if it's found as a standalone block (rare)
+            pass
+        
+        # Cleanup residual double-spacing and empty lines
+        text = re.sub(r' +', ' ', text)
+        text = re.sub(r'\n\s*\n', '\n\n', text)
         
         # Final pass: remove any double timestamps or empty speaker headers
         text = re.sub(r'\[SPEAKER\]\s+Unknown Speaker\s+\[TIME\]\s+\[\d+:\d+\]\s*\n*\s*$', '', text)
@@ -1043,12 +1059,15 @@ class TranscriptionEngine:
         # Backups are only tapped linearly when primary drops.
         max_workers = primary_count
 
-        # Fetch metadata keywords
-        keywords = ""
+        # Fetch metadata keywords (Dual-Stream Strategy)
+        whisper_keywords = ""
+        llama_context = ""
         if company_name and company_name.lower() not in ["meeting", "test", "demo", ""]:
-            keywords = await self.generate_metadata_keywords(company_name, job_id)
-            if keywords:
-                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🎯 Identified & Injected {len(keywords.split(','))} company-specific keywords for enhanced speaker/entity accuracy."})
+            kw_data = await self.generate_metadata_keywords(company_name, job_id)
+            whisper_keywords = kw_data.get("whisper", "")
+            llama_context = kw_data.get("llama", "")
+            if llama_context:
+                await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🎯 Identified & Isolated {len(llama_context.split(','))} executive names for speaker identification."})
 
         # Split audio with strict job isolation
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "✂️ Splitting audio into chunks..."})
@@ -1075,7 +1094,8 @@ class TranscriptionEngine:
             if job_id in self.cancelled_jobs:
                 return idx, {"text": "[CANCELLED]", "error": True}
                 
-            result = self.transcribe_chunk(chunk_path, job_id, all_keys, model, keywords)
+            # PASS WHISPER ONLY TECHNICAL JARGON (fixes hallucination of names)
+            result = self.transcribe_chunk(chunk_path, job_id, all_keys, model, whisper_keywords)
             
             # SMART TIMESTAMP CALCULATION & DIARIZATION INJECTION
             chunk_offset_seconds = idx * chunk_minutes * 60
@@ -1096,9 +1116,9 @@ class TranscriptionEngine:
                             "text": segment["text"].strip()
                         })
             
-            # SMART DIARIZATION PASS (Zero-Loss Map System)
+            # SMART DIARIZATION PASS (PASS FULL CONTEXT/EXECUTIVES HERE)
             if segments_data and not result.get("error"):
-                formatted_text = self.smart_format_chunk_sync(segments_data, job_id, company_name, keywords, all_keys)
+                formatted_text = self.smart_format_chunk_sync(segments_data, job_id, company_name, llama_context, all_keys)
                 result["text"] = formatted_text
             elif result.get("text") and not result.get("error"):
                 # Safety fallback
@@ -1142,7 +1162,7 @@ class TranscriptionEngine:
                 full_text += f"\n\n[WARNING: A section failed to transcribe. Error: {err_txt}]"
 
         # Post-process
-        full_text = self.post_process_transcript(full_text, keywords)
+        full_text = self.post_process_transcript(full_text, llama_context)
         
         valid_chunk_count = sum(1 for r in results if r and not r.get("error"))
         await ws_manager.broadcast({
