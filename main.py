@@ -278,29 +278,57 @@ class TranscriptionEngine:
             self.key_usage[key]["cooldown_until"] = time.time() + wait_time
 
     def _get_next_key(self, keys: list) -> Optional[str]:
-        """Round-robin key selection with strict global rate limit awareness."""
+        """Round-robin key selection with strict global rate limit awareness and a 25% backup redundancy layer."""
         if not keys:
             return None
+            
         with self.key_lock:
             now = time.time()
-            best_key = None
-            min_calls = float('inf')
             
-            # Filter natively available keys
-            available_keys = [k for k in keys if now >= self.key_usage[k].get("cooldown_until", 0)]
+            # --- FALLBACK SYSTEM 1: Strict 25% Key Reserve ---
+            paid_keys = settings_manager.settings.get("paid_api_keys", [])
+            free_keys = settings_manager.settings.get("free_api_keys", [])
             
-            # If all APIs are globally hard-banned, return the one closest to waking up so the thread can micro-sleep
-            if not available_keys:
-                return min(keys, key=lambda k: self.key_usage[k].get("cooldown_until", 0))
+            backup_count = 0
+            if free_keys:
+                backup_count = max(1, int(len(free_keys) * 0.25))
+                # If they only have 1 key, we can't reserve it as backup
+                if backup_count >= len(free_keys):
+                    backup_count = 0 if len(free_keys) == 1 else 1
 
-            for key in available_keys:
-                usage = self.key_usage[key]
+            if backup_count > 0:
+                backup_keys = free_keys[-backup_count:]
+                primary_free = free_keys[:-backup_count]
+            else:
+                backup_keys = []
+                primary_free = free_keys
+                
+            primary_keys = paid_keys + primary_free
+            
+            # Reset call states over time
+            for k in (primary_keys + backup_keys):
+                usage = self.key_usage[k]
                 if now - usage["last_reset"] > 60:
                     usage["calls"] = 0
                     usage["last_reset"] = now
-                if usage["calls"] < min_calls:
-                    min_calls = usage["calls"]
-                    best_key = key
+
+            # Filter natively available keys
+            available_primary = [k for k in primary_keys if now >= self.key_usage[k].get("cooldown_until", 0)]
+            available_backup = [k for k in backup_keys if now >= self.key_usage[k].get("cooldown_until", 0)]
+            
+            best_key = None
+            if available_primary:
+                # Prioritize primary rotation
+                best_key = min(available_primary, key=lambda k: self.key_usage[k]["calls"])
+            elif available_backup:
+                # FALLBACK FLIPPED: Primary exhausted. Start utilizing untouched backup keys to keep pipeline alive.
+                best_key = min(available_backup, key=lambda k: self.key_usage[k]["calls"])
+            else:
+                # If ALL APIs (Primary + Backup) are globally hard-banned, return the one closest to waking up 
+                all_configured = primary_keys + backup_keys
+                if not all_configured: return None
+                return min(all_configured, key=lambda k: self.key_usage[k].get("cooldown_until", 0))
+
             if best_key:
                 self.key_usage[best_key]["calls"] += 1
             return best_key
@@ -873,10 +901,32 @@ class TranscriptionEngine:
             return {"error": "No API keys configured"}
 
         model = settings_manager.settings.get("default_model", "whisper-large-v3")
-        chunk_minutes = max(20, settings_manager.settings.get("chunk_duration_minutes", 20))
         
-        # Absolute 1-to-1 matching: Prevent 20 workers from brutally hitting 8 keys concurrently
-        max_workers = len(all_keys)
+        # --- FALLBACK SYSTEM 2: Dynamic Chunk Auto-Scaling based on Network Bandwidth ---
+        total_keys = len(all_keys)
+        if total_keys <= 2:
+            chunk_minutes = 25  # Bottleneck constraint: Massive chunks, very few requests
+        elif total_keys <= 5:
+            chunk_minutes = 20
+        elif total_keys <= 10:
+            chunk_minutes = 15  # Solid capability
+        else:
+            chunk_minutes = 10  # Plentiful API keys, can afford rapid micro-chunk requests
+            
+        # Ensure user settings don't accidentally override safety limit
+        saved_chunk_size = settings_manager.settings.get("chunk_duration_minutes", 10)
+        chunk_minutes = max(chunk_minutes, saved_chunk_size)
+        
+        # --- FALLBACK SYSTEM 3: Dynamic Load Balancing ---
+        free_keys = settings_manager.settings.get("free_api_keys", [])
+        backup_count = max(1, int(len(free_keys) * 0.25)) if free_keys else 0
+        if backup_count >= len(free_keys): backup_count = 0 if len(free_keys) == 1 else 1
+        
+        primary_count = max(1, len(all_keys) - backup_count)
+        
+        # Cap concurrent workers strictly to the Primary pool to prevent early DDoS collisions.
+        # Backups are only tapped linearly when primary drops.
+        max_workers = primary_count
 
         # Fetch metadata keywords
         keywords = ""
