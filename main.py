@@ -633,14 +633,15 @@ class TranscriptionEngine:
                     pass
             return None
 
-    def split_audio(self, audio_path: Path, chunk_minutes: int = 10) -> List[Path]:
-        """Split audio into perfect MP3 chunks (re-encoding to guarantee 100% valid headers for Whisper)."""
+    def split_audio(self, audio_path: Path, chunk_minutes: int, job_id: str) -> List[Path]:
+        """Split audio into perfect MP3 chunks with strict isolation by Job ID."""
         import subprocess
         
         chunk_seconds = chunk_minutes * 60
         # Force MP3 output to ensure Groq Whisper compatibility
         ext = ".mp3"
-        output_pattern = str(TEMP_DIR / f"{audio_path.stem}_chunk_%04d{ext}")
+        # Using job_id for absolute isolation so concurrent transcripions never collide chunks
+        output_pattern = str(TEMP_DIR / f"job_{job_id}_chunk_%04d{ext}")
         
         cmd = [
             FFMPEG_PATH or "ffmpeg",
@@ -655,7 +656,7 @@ class TranscriptionEngine:
         try:
             # DEVNULL prevents any stdout/stderr buffer deadlocks
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            chunks = sorted(TEMP_DIR.glob(f"{audio_path.stem}_chunk_*{ext}"))
+            chunks = sorted(TEMP_DIR.glob(f"job_{job_id}_chunk_*{ext}"))
             return chunks
         except subprocess.CalledProcessError as e:
             logger.error(f"FFmpeg split failed on {audio_path.name}")
@@ -890,7 +891,7 @@ class TranscriptionEngine:
                     
                     base_prompt = (
                         f"{keyword_injection}"
-                        "Hello, welcome! This is a highly accurate, grammatically correct, and fully punctuated transcript of the professional financial presentation. Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
+                        "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
                     )
                     
                     # Groq Whisper has a hard 896 character prompt limit
@@ -983,13 +984,16 @@ class TranscriptionEngine:
         # Hard-delete any instances where Whisper hallucinated the internal system prompt
         hallucination_str1 = "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
         hallucination_str2 = "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue"
-        text = text.replace(hallucination_str1, "").replace(hallucination_str2, "")
+        hallucination_str3 = "Hello, welcome! This is a highly accurate, grammatically correct, and fully punctuated transcript of the professional financial presentation."
+        text = text.replace(hallucination_str1, "").replace(hallucination_str2, "").replace(hallucination_str3, "")
         
         if context_keywords:
             text = text.replace(context_keywords, "")
             # Sometimes it adds a trailing comma or space
             text = text.replace(f"{context_keywords},", "").replace(f"{context_keywords}.", "")
         
+        # Final pass: remove any double timestamps or empty speaker headers
+        text = re.sub(r'\[SPEAKER\]\s+Unknown Speaker\s+\[TIME\]\s+\[\d+:\d+\]\s*\n*\s*$', '', text)
         return text.strip()
 
     async def transcribe_full(self, audio_path: Path, job_id: str, company_name: str = "Meeting") -> dict:
@@ -1046,11 +1050,11 @@ class TranscriptionEngine:
             if keywords:
                 await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"🎯 Identified & Injected {len(keywords.split(','))} company-specific keywords for enhanced speaker/entity accuracy."})
 
-        # Split audio
+        # Split audio with strict job isolation
         await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "✂️ Splitting audio into chunks..."})
         
         loop = asyncio.get_event_loop()
-        chunks = await loop.run_in_executor(None, self.split_audio, audio_path, chunk_minutes)
+        chunks = await loop.run_in_executor(None, self.split_audio, audio_path, chunk_minutes, job_id)
         total_chunks = len(chunks)
         
         if total_chunks == 0:
@@ -1139,6 +1143,12 @@ class TranscriptionEngine:
 
         # Post-process
         full_text = self.post_process_transcript(full_text, keywords)
+        
+        valid_chunk_count = sum(1 for r in results if r and not r.get("error"))
+        await ws_manager.broadcast({
+            "type": "log", "job_id": job_id, 
+            "message": f"📊 Final Assembly: Collected {valid_chunk_count}/{total_chunks} segments. Cleaning visuals..."
+        })
         
         processing_time = time.time() - start_time
         
