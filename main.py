@@ -662,14 +662,14 @@ class TranscriptionEngine:
         import httpx
         system_prompt = (
             f"You are an elite transcription editor for the '{company_name}' meeting. "
-            "You are given a raw transcript segment from Whisper. Your task is to intelligently identify the actual Speaker names "
-            "based on introductions, context, and the provided key executive names. "
-            "Replace generic 'Speaker 1:' tags or unlabelled text with their actual names in bold, e.g., **Tim Cook:** \n"
-            "Format the dialogue beautifully as an official corporate PDF transcript.\n"
+            "You are given a raw transcript segment from Whisper.\n"
+            "Your task is to identify the actual Speaker names based on context and provided keywords.\n"
             "CRITICAL RULES: \n"
-            "1. Do NOT summarize or omit any spoken text. Output the FULL transcript exactly as spoken.\n"
-            "2. Do not add any extra commentary, introductory text, or pleasantries like 'Here is the transcript'. "
-            "Output ONLY the perfectly formatted transcript."
+            "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their name (e.g. '[SPEAKER] Tim Cook'). \n"
+            "2. On the immediate next line, output '[TITLE]' followed by their Title/Company (e.g. '[TITLE] CEO | Apple'). If unclear, use '[TITLE] Speaker'.\n"
+            "3. Then output their spoken text on the following lines.\n"
+            "4. Do NOT summarize or omit any spoken text. Output FULL dialogue exactly as spoken.\n"
+            "5. Do NOT add extra commentary."
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
@@ -924,13 +924,14 @@ class TranscriptionEngine:
         safe_name = re.sub(r'[^\w\s-]', '', company_name).strip().replace(' ', '_')
         file_prefix = f"{safe_name}_{timestamp}"
         
-        # Save TXT
+        # Save TXT (Clean tags for txt reading)
+        clean_txt = full_text.replace('[SPEAKER]', '').replace('[TITLE]', '')
         txt_path = OUTPUT_DIR / f"{file_prefix}.txt"
         with open(txt_path, 'w', encoding='utf-8') as f:
             f.write(f"{company_name} - TRANSCRIPT\n")
             f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
             f.write("=" * 60 + "\n\n")
-            f.write(full_text)
+            f.write(clean_txt)
 
         # Save PDF
         pdf_path = OUTPUT_DIR / f"{file_prefix}.pdf"
@@ -1039,24 +1040,34 @@ class TranscriptionEngine:
                 continue
                 
             clean_line = line.replace('**', '')
-            is_speaker = False
-            
-            # Smart Regex: Matches "Speaker 1:", "Tim Cook:", "John Doe - CEO:" 
-            if re.match(r'^[A-Z][\w\s\.\-]{0,40}:', clean_line) or re.match(r'Speaker\s*\d+\s*:', clean_line, flags=re.IGNORECASE):
-                is_speaker = True
-                
-            if is_speaker:
+
+            if clean_line.startswith('[SPEAKER]'):
+                speaker_name = clean_line.replace('[SPEAKER]', '').strip()
+                pdf.ln(5)
+                pdf.set_font('Helvetica', 'B', 10)
+                pdf.cell(0, 5, speaker_name, ln=True)
+            elif clean_line.startswith('[TITLE]'):
+                title = clean_line.replace('[TITLE]', '').strip()
+                pdf.set_font('Helvetica', 'I', 9)
+                pdf.cell(0, 5, title, ln=True)
+                pdf.set_font('Helvetica', '', 10)
+            elif clean_line.startswith('---'):
+                pdf.set_font('Helvetica', 'I', 9)
+                pdf.cell(0, 5, clean_line, ln=True)
+                pdf.set_font('Helvetica', '', 10)
+            elif re.match(r'^[A-Z][\w\s\.\-]{0,40}:', clean_line) or re.match(r'Speaker\s*\d+\s*:', clean_line, flags=re.IGNORECASE):
+                # Fallback if AI misses the new tag
+                pdf.ln(4)
                 pdf.set_font('Helvetica', 'B', 10)
                 pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
-                pdf.set_font('Helvetica', '', 10)
-            elif line.startswith('---'):
-                pdf.set_font('Helvetica', 'I', 9)
-                pdf.cell(0, 5, line, ln=True)
                 pdf.set_font('Helvetica', '', 10)
             else:
                 pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
 
-        pdf.output(str(output_path))
+        try:
+            pdf.output(str(output_path))
+        except BaseException as e:
+            logger.error(f"Failed to save PDF: {str(e)}")
 
     async def _compress_mp3(self, input_path: Path, output_path: Path, bitrate: str = "128k"):
         """Compress or copy MP3 to specified path."""
