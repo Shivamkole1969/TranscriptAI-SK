@@ -700,8 +700,18 @@ class TranscriptionEngine:
                     verify=verify
                 )
                 if response.status_code == 429:
-                    # Rate limited by Llama! Hop to next key and back off gracefully...
-                    time.sleep(1.5)
+                    wait_time = 1.5
+                    retry_after = response.headers.get("retry-after")
+                    if retry_after:
+                        try: wait_time = float(retry_after)
+                        except: pass
+                    else:
+                        try:
+                            msg = response.json().get("error", {}).get("message", "")
+                            match = re.search(r'try again in (\d+\.?\d*)s', msg)
+                            if match: wait_time = float(match.group(1))
+                        except: pass
+                    time.sleep(min(wait_time, 5.0))
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
@@ -758,10 +768,23 @@ class TranscriptionEngine:
                     )
                     
                     if response.status_code == 429:
-                        # ALL limits exhausted! We must gracefully hop round-robin until the cooldown resets
+                        wait_time = 2.0
+                        retry_after = response.headers.get("retry-after")
+                        if retry_after:
+                            try: wait_time = float(retry_after)
+                            except: pass
+                        else:
+                            try:
+                                msg = response.json().get("error", {}).get("message", "")
+                                match = re.search(r'try again in (\d+\.?\d*)s', msg)
+                                if match: wait_time = float(match.group(1))
+                            except: pass
+                            
                         if attempt % 15 == 0:
-                            logger.info(f"Chunk rate-limited. Waiting for key windows to clear... (Attempt {attempt}/{max_retries})")
-                        time.sleep(2)
+                            logger.info(f"Chunk rate-limited. Waiting {wait_time:.1f}s for key window... (Attempt {attempt}/{max_retries})")
+                        
+                        # Wait based on API response but cap at 10s so it can actively hop to a fresher key
+                        time.sleep(min(wait_time, 10.0))
                         continue
                     
                     response.raise_for_status()
