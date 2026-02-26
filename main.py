@@ -1043,6 +1043,19 @@ class TranscriptionEngine:
         pdf.add_page()
         pdf.set_font('Helvetica', '', 10)
 
+        def _safe_write(pdf_obj, text_line):
+            safe_text = text_line.encode('latin-1', 'replace').decode('latin-1')
+            try:
+                pdf_obj.multi_cell(0, 5, safe_text)
+            except Exception as e:
+                # Fallback for FPDFException "Not enough horizontal space" caused by huge unbroken words
+                chunks = [safe_text[i:i+90] for i in range(0, len(safe_text), 90)]
+                for chunk in chunks:
+                    try:
+                        pdf_obj.multi_cell(0, 5, chunk)
+                    except:
+                        pass
+
         for line in text.split('\n'):
             line = line.strip()
             if not line:
@@ -1069,10 +1082,10 @@ class TranscriptionEngine:
                 # Fallback if AI misses the new tag
                 pdf.ln(4)
                 pdf.set_font('Helvetica', 'B', 10)
-                pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
+                _safe_write(pdf, clean_line)
                 pdf.set_font('Helvetica', '', 10)
             else:
-                pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
+                _safe_write(pdf, clean_line)
 
         try:
             pdf.output(str(output_path))
