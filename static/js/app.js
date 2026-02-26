@@ -230,6 +230,8 @@ async function handleFileUpload(files) {
     }
 }
 
+let jobStartedAt = new Map();
+
 // ─── Job Cards ────────────────────────────────────────────────────
 function createJobCard(jobId, title, source) {
     const queueList = document.getElementById('queueList');
@@ -247,7 +249,10 @@ function createJobCard(jobId, title, source) {
                 <div class="job-title">${escapeHtml(title)}</div>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;" class="truncate">${escapeHtml(source)}</div>
             </div>
-            <span class="job-status processing">Processing</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span class="job-status processing">Processing</span>
+                <button class="btn btn-sm btn-danger cancel-btn" onclick="cancelJob('${jobId}')" style="padding: 4px 8px; font-size: 11px; border-radius: 4px;">⏸ Force Stop</button>
+            </div>
         </div>
         <div class="progress-bar-container">
             <div class="progress-bar" id="progress-${jobId}" style="width: 0%"></div>
@@ -261,6 +266,25 @@ function createJobCard(jobId, title, source) {
 
     queueList.prepend(card);
     AppState.jobs.set(jobId, { title, source, status: 'processing', progress: 0 });
+    jobStartedAt.set(jobId, Date.now());
+}
+
+function cancelJob(jobId) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "cancel", job_id: jobId }));
+        const card = document.getElementById(`job-${jobId}`);
+        if (card) {
+            const btn = card.querySelector('.cancel-btn');
+            if (btn) btn.remove();
+            const status = card.querySelector('.job-status');
+            if (status) {
+                status.className = 'job-status error';
+                status.textContent = 'Cancelled';
+            }
+            updateJobProgress(jobId, 0, '❌ Force Stopped by User');
+            addJobLog(jobId, 'Job cancelled via UI force stop.');
+        }
+    }
 }
 
 function updateJobProgress(jobId, progress, message) {
@@ -269,8 +293,21 @@ function updateJobProgress(jobId, progress, message) {
     const pct = document.getElementById(`progress-pct-${jobId}`);
 
     if (bar) bar.style.width = `${progress}%`;
-    if (text && message) text.textContent = message;
     if (pct) pct.textContent = `${progress}%`;
+    if (text && message) {
+        let etaMsg = "";
+        if (progress > 5 && progress < 100 && jobStartedAt.has(jobId)) {
+            let elapsed = (Date.now() - jobStartedAt.get(jobId)) / 1000;
+            let rate = progress / elapsed;
+            let remaining = (100 - progress) / rate;
+            if (remaining > 0) {
+                let m = Math.floor(remaining / 60);
+                let s = Math.floor(remaining % 60);
+                etaMsg = ` (ETA: ${m}m ${s}s)`;
+            }
+        }
+        text.textContent = message + etaMsg;
+    }
 }
 
 function addJobLog(jobId, message) {
@@ -293,6 +330,9 @@ function completeJob(jobId, data) {
         status.className = 'job-status completed';
         status.textContent = 'Completed';
     }
+
+    const btn = card.querySelector('.cancel-btn');
+    if (btn) btn.remove();
 
     updateJobProgress(jobId, 100, `✅ Done in ${data?.processing_time || 0}s`);
 

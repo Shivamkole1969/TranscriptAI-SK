@@ -270,6 +270,7 @@ class TranscriptionEngine:
         self.key_usage = defaultdict(lambda: {"calls": 0, "last_reset": time.time()})
         self.key_lock = threading.Lock()
         self.active_jobs: Dict[str, dict] = {}
+        self.cancelled_jobs = set()
 
     def _get_next_key(self, keys: list) -> Optional[str]:
         """Round-robin key selection with rate limit awareness."""
@@ -815,6 +816,9 @@ class TranscriptionEngine:
 
     async def transcribe_full(self, audio_path: Path, job_id: str, company_name: str = "Meeting") -> dict:
         """Full transcription pipeline with parallel chunk processing."""
+        if job_id in self.cancelled_jobs:
+            return {"error": "Cancelled"}
+            
         start_time = time.time()
         all_keys = settings_manager.get_all_keys()
         
@@ -855,6 +859,9 @@ class TranscriptionEngine:
         completed_count = 0
 
         def process_chunk(idx, chunk_path):
+            if job_id in self.cancelled_jobs:
+                return idx, {"text": "[CANCELLED]", "error": True}
+                
             key = self._get_next_key(all_keys)
             if not key:
                 return idx, {"text": "[ERROR: No API key available]", "error": True}
@@ -875,6 +882,10 @@ class TranscriptionEngine:
             
             for coro in asyncio.as_completed(tasks):
                 idx, result = await coro
+                if job_id in self.cancelled_jobs:
+                    await ws_manager.broadcast({"type": "error", "job_id": job_id, "message": "🛑 Job cancelled by user."})
+                    return {"error": "Cancelled"}
+                    
                 results[idx] = result
                 completed_count += 1
                 progress = int(5 + (completed_count / total_chunks) * 85)
@@ -1091,6 +1102,11 @@ async def websocket_endpoint(websocket: WebSocket):
             msg = json.loads(data)
             if msg.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
+            elif msg.get("type") == "cancel":
+                job_id = msg.get("job_id")
+                if job_id:
+                    engine.cancelled_jobs.add(job_id)
+                    await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "🛑 Force Stop signal received."})
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
 
