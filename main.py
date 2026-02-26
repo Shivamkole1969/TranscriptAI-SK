@@ -668,8 +668,9 @@ class TranscriptionEngine:
             "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their name (e.g. '[SPEAKER] Tim Cook'). \n"
             "2. On the immediate next line, output '[TITLE]' followed by their Title/Company (e.g. '[TITLE] CEO | Apple'). If unclear, use '[TITLE] Speaker'.\n"
             "3. Then output their spoken text on the following lines.\n"
-            "4. Do NOT summarize or omit any spoken text. Output FULL dialogue exactly as spoken.\n"
-            "5. Do NOT add extra commentary."
+            "4. Do NOT summarize, cut, or omit any spoken words. output EVERY single word from the raw transcript.\n"
+            "5. Do NOT add extra commentary.\n"
+            "6. The raw transcript may NOT have speaker tags. It is YOUR job to deduce when a new person starts speaking based on introductions, questions, or dialogue flow."
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
@@ -685,7 +686,7 @@ class TranscriptionEngine:
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json={
-                        "model": "llama-3.1-8b-instant", # Extremely fast for formatting, high RPM/TPM Limits
+                        "model": "llama-3.3-70b-versatile", # Max Intelligence for Speaker Matching
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
@@ -759,8 +760,7 @@ class TranscriptionEngine:
                         "Transcribe audio with 100% accuracy. "
                         f"{dialect_hint}"
                         f"{keyword_injection}"
-                        "Terms: Lakh, Crore, EBITDA, YoY, QoQ, PAT. "
-                        "Label speakers (Speaker 1, etc)."
+                        "Terms: Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
                     )
                     
                     # Groq Whisper has a hard 896 character prompt limit
