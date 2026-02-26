@@ -657,8 +657,8 @@ class TranscriptionEngine:
             logger.error(f"Failed to generate metadata keywords: {e}")
             return ""
 
-    def smart_format_chunk_sync(self, text: str, company_name: str, context_keywords: str, api_key: str) -> str:
-        """Intelligently identify speakers and format dialogue using Llama 3 70B."""
+    def smart_format_chunk_sync(self, text: str, company_name: str, context_keywords: str, all_keys: list) -> str:
+        """Intelligently identify speakers and format dialogue."""
         import httpx
         system_prompt = (
             f"You are an elite transcription editor for the '{company_name}' meeting. "
@@ -673,14 +673,19 @@ class TranscriptionEngine:
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
-        for attempt in range(3):
+        for attempt in range(10): # Spray across keys up to 10 times to bypass limits
+            api_key = self._get_next_key(all_keys)
+            if not api_key:
+                time.sleep(1)
+                continue
+                
             try:
                 verify = str(cert_path) if cert_path.exists() else True
                 response = httpx.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": "llama-3.1-8b-instant", # Extremely fast for formatting, high RPM/TPM Limits
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
@@ -691,24 +696,27 @@ class TranscriptionEngine:
                     verify=verify
                 )
                 if response.status_code == 429:
-                    retry_after = int(response.headers.get('retry-after', 5))
-                    time.sleep(retry_after)
+                    # Hop to next key instantly! No sleeping! ⚡️
+                    time.sleep(1.5)
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
             except Exception as e:
-                logger.debug(f"Smart format error: {e}")
+                logger.debug(f"Smart format error (attempt {attempt+1}): {e}")
                 time.sleep(2)
         return text
 
-
-
-    def transcribe_chunk(self, chunk_path: Path, api_key: str, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
+    def transcribe_chunk(self, chunk_path: Path, all_keys: list, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
         """Transcribe a single audio chunk using Groq API."""
         import httpx
         
-        max_retries = 5
+        max_retries = 15
         for attempt in range(max_retries):
+            api_key = self._get_next_key(all_keys)
+            if not api_key:
+                time.sleep(1)
+                continue
+            
             try:
                 with open(chunk_path, 'rb') as f:
                     files = {'file': (chunk_path.name, f, 'audio/mpeg')}
@@ -777,9 +785,9 @@ class TranscriptionEngine:
                     )
                     
                     if response.status_code == 429:
-                        retry_after = int(response.headers.get('retry-after', 30))
-                        logger.warning(f"Rate limited, waiting {retry_after}s...")
-                        time.sleep(retry_after)
+                        # Rate Limited! 🛑
+                        # DO NOT SLEEP 30 SECONDS! Just 1.5s to prevent hammering, then let the loop hop to the next active key! ⚡️
+                        time.sleep(1.5)
                         continue
                     
                     response.raise_for_status()
@@ -788,11 +796,11 @@ class TranscriptionEngine:
             except Exception as e:
                 logger.error(f"Chunk transcription error (attempt {attempt+1}): {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(5 * (attempt + 1))
+                    time.sleep(3)
                 else:
                     return {"text": f"[ERROR: Could not transcribe chunk - {str(e)}]", "error": True}
         
-        return {"text": "[ERROR: Max retries exceeded]", "error": True}
+        return {"text": "[ERROR: Max retries exceeded across all keys]", "error": True}
 
     def post_process_transcript(self, text: str) -> str:
         """Apply speaker diarization regex and formatting."""
@@ -862,14 +870,11 @@ class TranscriptionEngine:
             if job_id in self.cancelled_jobs:
                 return idx, {"text": "[CANCELLED]", "error": True}
                 
-            key = self._get_next_key(all_keys)
-            if not key:
-                return idx, {"text": "[ERROR: No API key available]", "error": True}
-            result = self.transcribe_chunk(chunk_path, key, model, keywords)
+            result = self.transcribe_chunk(chunk_path, all_keys, model, keywords)
             
-            # SMART DIARIZATION PASS
+            # SMART DIARIZATION PASS (Intelligently maps names to generic speaker tags)
             if result.get("text") and not result.get("error"):
-                formatted_text = self.smart_format_chunk_sync(result["text"], company_name, keywords, key)
+                formatted_text = self.smart_format_chunk_sync(result["text"], company_name, keywords, all_keys)
                 result["text"] = formatted_text
                 
             return idx, result
