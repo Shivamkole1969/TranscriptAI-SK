@@ -719,38 +719,34 @@ class TranscriptionEngine:
             "Your task is to identify the precise speaker for each segment based on context, flow, and provided keywords.\n"
             "CRITICAL RULES:\n"
             "1. You MUST return your response ONLY as a JSON object with a single key 'speaker_changes'.\n"
-            "2. 'speaker_changes' must be a list of objects containing 'id' (the integer ID where a NEW speaker begins) and 'speaker' (their deduced true name AND their corporate designation/title).\n"
+            "2. 'speaker_changes' must be a list of objects containing 'id' (the integer ID where a NEW speaker begins) and 'speaker' (their deduced true name).\n"
             "3. If the speaker does not change between consecutive IDs, do NOT add a new entry for every ID. Only add an entry when the speaker visibly CHANGES.\n"
-            "4. IMPORTANT: If you recognize the speaker as a prominent executive for this company, append their exact title in parentheses, eg: 'Tim Cook (CEO)'. If you are not 100% sure of their title, do NOT hallucinate one.\n"
-            "5. NEVER invent or write actual dialogue. Just map the changes.\n"
-            "6. Example output:\n"
-            '{"speaker_changes": [{"id": 0, "speaker": "Host"}, {"id": 12, "speaker": "Sanjiv Bajaj (Chairman & Managing Director)"}]}'
+            "4. NEVER invent or write actual dialogue. Just map the changes.\n"
+            "5. The context keywords are hints. Use them to map speakers like CEO, CFO, etc.\n"
+            'Example output: {"speaker_changes": [{"id": 0, "speaker": "Host"}, {"id": 12, "speaker": "CEO Name"}]}'
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nTranscript Segment:\n{raw_text_to_process}"
         
+        # 3-Tier Fallback Models
+        models_to_try = [
+            "llama-3.3-70b-versatile",
+            "mixtral-8x7b-32768",
+            "llama-3.1-8b-instant"
+        ]
+        
         attempt = 0
+        model_idx = 0
         speaker_map = {}
         
         while attempt < 100:
             if job_id in self.cancelled_jobs:
                 return raw_text_to_process
                 
+            current_model = models_to_try[model_idx % len(models_to_try)]
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
                 continue
-                
-            # 3-Tier Fallback Architecture (Rollback system)
-            if attempt < 25:
-                current_model = "llama-3.3-70b-versatile"
-            elif attempt < 50:
-                current_model = "mixtral-8x7b-32768"
-            elif attempt < 75:
-                current_model = "llama-3.1-8b-instant"
-            else:
-                # 3rd Fallback: If all 75 API permutations fail, gracefully return original text to never drop a chunk!
-                logger.warning(f"All 3 AI Diarization fallbacks exhausted. Rolling back to original untouched whisper text.")
-                break
                 
             try:
                 verify = str(cert_path) if cert_path.exists() else True
@@ -765,12 +761,13 @@ class TranscriptionEngine:
                         ],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.05,
-                        "max_tokens": 1500  # lowered to completely dodge 8192 token hard-cap 400 Bad Request Context limitations
+                        "max_tokens": 8000
                     },
                     timeout=180,
                     verify=verify
                 )
                 
+                # Handle Rate Limits
                 if response.status_code == 429:
                     wait_time = 1.5
                     retry_after = response.headers.get("retry-after")
@@ -785,36 +782,46 @@ class TranscriptionEngine:
                         except: pass
                     
                     self._report_key_cooldown(api_key, wait_time)
-                    import random
-                    time.sleep(random.uniform(0.5, 1.5))
+                    time.sleep(1)
                     attempt += 1  
                     continue
-                    
-                elif response.status_code == 200:
+                
+                # Handle Success
+                if response.status_code == 200:
                     raw_json = response.json()["choices"][0]["message"]["content"].strip()
                     try:
                         parsed = json.loads(raw_json)
                         changes = parsed.get("speaker_changes", [])
                         for change in changes:
                             speaker_map[int(change["id"])] = change["speaker"]
-                        break
+                        break # Success!
                     except Exception as e:
-                        logger.debug(f"JSON Parse failed, retrying: {e}")
+                        logger.debug(f"JSON Parse failed on {current_model}: {e}. Retrying...")
                         attempt += 1
-                        time.sleep(1)
                         continue
-                else:
-                    # Traps 400 Bad Request, 500 Server Error, etc.
-                    logger.debug(f"Groq formatting error {response.status_code}: {response.text}")
+                
+                # Handle Bad Request (400) or other errors
+                if response.status_code == 400:
+                    err_msg = response.text
+                    logger.warning(f"Groq 400 on {current_model}: {err_msg}. Rotating model...")
+                    model_idx += 1 # Shift to next model in tier
                     attempt += 1
                     time.sleep(1)
                     continue
-                    
+                
+                # Generic fallback for other status codes
+                logger.error(f"Unexpected Groq Status {response.status_code} on {current_model}. Hopping...")
+                model_idx += 1
+                attempt += 1
+                time.sleep(2)
+                
             except Exception as e:
                 attempt += 1
-                if attempt % 10 == 0:
-                    logger.debug(f"Smart format waiting/hopping... (attempt {attempt}): {e}")
+                if attempt % 5 == 0:
+                    logger.debug(f"Smart format glitch on {current_model}: {e}. Rotating...")
+                    model_idx += 1
                 time.sleep(2)
+
         
         # Assemble perfectly untouched text
         final_text = ""
@@ -893,7 +900,8 @@ class TranscriptionEngine:
                         'model': model,
                         'language': 'en',
                         'response_format': 'verbose_json',
-                        'prompt': final_prompt
+                        'prompt': final_prompt,
+                        'temperature': '0'  # Forces strictly deterministic, fully accurate reading and heavily limits hallucination loops
                     }
                     
                     verify = str(cert_path) if cert_path.exists() else True
@@ -920,25 +928,20 @@ class TranscriptionEngine:
                                 if match: wait_time = float(match.group(1))
                             except: pass
                             
-                        if attempt % 15 == 0:
-                            logger.info(f"Chunk rate-limited. Global {wait_time:.1f}s ban on key... (Attempt {attempt}/{max_retries})")
-                        
                         self._report_key_cooldown(api_key, wait_time)
-                        import random
-                        
-                        if job_id in self.cancelled_jobs:
-                            return {"text": "[CANCELLED]", "error": True}
-                            
-                        time.sleep(random.uniform(0.5, 2.0))
+                        time.sleep(2)
                         attempt += 1
                         continue
-                        
-                    elif response.status_code == 400:
-                        # 400 usually means Whispers hit a "0 bytes valid media" mark (100% dead silence chunk)
-                        # We return empty so it doesn't infinite loop, but we don't crash.
-                        logger.debug(f"Audio chunk 400 silent/empty limit hit on attempt {attempt}.")
-                        return {"text": "", "segments": []}
                     
+                    if response.status_code == 400:
+                        try:
+                            err_data = response.json()
+                            err_msg = err_data.get("error", {}).get("message", "").lower()
+                            if "no speech" in err_msg or "too short" in err_msg:
+                                logger.info(f"Chunk {chunk_path.name} is silent or too short. Skipping gracefully.")
+                                return {"text": "[SILENCE]", "segments": [], "error": False}
+                        except: pass
+                        
                     response.raise_for_status()
                     return response.json()
                     
@@ -1019,11 +1022,18 @@ class TranscriptionEngine:
         chunk_minutes = max(chunk_minutes, saved_chunk_size)
         
         # --- FALLBACK SYSTEM 3: Dynamic Load Balancing ---
+        import math
         free_keys = settings_manager.settings.get("free_api_keys", [])
-        backup_count = max(1, int(len(free_keys) * 0.25)) if free_keys else 0
-        if backup_count >= len(free_keys): backup_count = 0 if len(free_keys) == 1 else 1
-        
+        backup_count = math.ceil(len(free_keys) * 0.25) if free_keys else 0
+        if backup_count >= len(free_keys) and len(free_keys) > 1:
+            backup_count = max(1, len(free_keys) // 2)
+            
         primary_count = max(1, len(all_keys) - backup_count)
+        
+        await ws_manager.broadcast({
+            "type": "log", "job_id": job_id, 
+            "message": f"⚙️ Engine Strategy: {primary_count} Primary Workers | {backup_count} Backup Keys (25% Safety Buffer active)"
+        })
         
         # Cap concurrent workers strictly to the Primary pool to prevent early DDoS collisions.
         # Backups are only tapped linearly when primary drops.
@@ -1152,13 +1162,6 @@ class TranscriptionEngine:
         pdf_path = OUTPUT_DIR / f"{file_prefix}.pdf"
         self._generate_pdf(pdf_path, company_name, full_text, processing_time)
 
-        # Generate & Save AI Executive Summary
-        await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "🧠 Synthesizing AI Executive Summary & Financial Extraction Brief..."})
-        summary_text = await loop.run_in_executor(None, self._generate_executive_summary, full_text, company_name, job_id, all_keys)
-        summary_pdf_path = OUTPUT_DIR / f"{file_prefix}_Executive_Summary.pdf"
-        if summary_text:
-            self._generate_summary_pdf(summary_pdf_path, company_name, summary_text)
-
         # Compress MP3 to output
         compressed_path = MP3_DIR / f"{file_prefix}.mp3"
         await self._compress_mp3(audio_path, compressed_path)
@@ -1178,8 +1181,6 @@ class TranscriptionEngine:
         import shutil
         shutil.copy(txt_path, bundle_dir)
         shutil.copy(pdf_path, bundle_dir)
-        if summary_pdf_path.exists():
-            shutil.copy(summary_pdf_path, bundle_dir)
         shutil.copy(compressed_path, bundle_dir)
         if keywords_path:
             shutil.copy(keywords_path, bundle_dir)
@@ -1310,125 +1311,6 @@ class TranscriptionEngine:
             pdf.output(str(output_path))
         except BaseException as e:
             logger.error(f"Failed to save PDF: {str(e)}")
-
-    def _generate_executive_summary(self, full_text: str, company_name: str, job_id: str, all_keys: list) -> str:
-        """Generate a 1-page executive summary and financial metrics using LLM."""
-        import httpx
-        
-        # We use Mixtral because it supports 32k context size (up to ~25,000 words easily) which guarantees the 
-        # entirety of a 1.5 hr master transcript fits without slicing.
-        model_to_use = "mixtral-8x7b-32768"
-        
-        system_prompt = (
-            "You are an elite financial analyst and executive assistant.\n"
-            "Given the transcribed meeting/call below, generate a professional, highly concise 1-page Executive Brief.\n"
-            "You MUST structure your response ONLY using exactly these three headings:\n\n"
-            "THE TL;DR:\n"
-            "[Provide a 3-paragraph executive summary of the entire call]\n\n"
-            "FINANCIAL METRICS EXTRACTED:\n"
-            "[Bulleted list of all numbers, revenue, EBITDA, guidance, timelines, or percentages mentioned]\n\n"
-            "ACTION ITEMS:\n"
-            "[Key decisions or forward-looking statements made by the leadership]\n\n"
-            "If any section lacks information from the transcript, briefly state 'Not explicitly mentioned'. "
-            "Do not output markdown asterisks or bold tags, just use plain structural line spacing and clean bullet dots (-)."
-        )
-        
-        # safely slice text to fit ~120,000 chars which safely fits Mixtral limit
-        safe_text_for_prompt = full_text[:120000]
-        user_prompt = f"Transcript for {company_name}:\n\n{safe_text_for_prompt}"
-        
-        attempt = 0
-        while attempt < 15:
-            if job_id in self.cancelled_jobs:
-                return ""
-                
-            api_key = self._get_next_key(all_keys)
-            if not api_key:
-                time.sleep(1)
-                continue
-                
-            try:
-                verify = str(cert_path) if cert_path.exists() else True
-                response = httpx.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={
-                        "model": model_to_use,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt}
-                        ],
-                        "temperature": 0.1,
-                        "max_tokens": 4000
-                    },
-                    timeout=180,
-                    verify=verify
-                )
-                
-                if response.status_code == 429:
-                    time.sleep(2)
-                    attempt += 1
-                    continue
-                    
-                if response.status_code == 200:
-                    return response.json()["choices"][0]["message"]["content"].strip()
-            except Exception as e:
-                attempt += 1
-                time.sleep(2)
-                
-        return "Summary could not be generated due to API timeouts."
-
-    def _generate_summary_pdf(self, output_path: Path, company_name: str, summary_text: str):
-        """Generate a professional PDF for the Executive Summary."""
-        from fpdf import FPDF
-
-        class SummaryPDF(FPDF):
-            def header(self):
-                self.set_font('Helvetica', 'B', 16)
-                self.cell(0, 10, f'{company_name} - EXECUTIVE SUMMARY', ln=True, align='L')
-                self.set_font('Helvetica', '', 9)
-                self.cell(0, 6, f'Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='R')
-                self.line(10, self.get_y(), 200, self.get_y())
-                self.ln(5)
-
-            def footer(self):
-                self.set_y(-15)
-                self.set_font('Helvetica', 'I', 8)
-                self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', align='C')
-
-        pdf = SummaryPDF()
-        pdf.alias_nb_pages()
-        pdf.add_page()
-
-        def _safe_write(pdf_obj, text_line, is_header=False):
-            safe_text = text_line.encode('latin-1', 'replace').decode('latin-1')
-            try:
-                if is_header:
-                    pdf_obj.set_font('Helvetica', 'B', 11)
-                else:
-                    pdf_obj.set_font('Helvetica', '', 11)
-                pdf_obj.multi_cell(0, 6, safe_text)
-            except:
-                pass
-
-        for line in summary_text.split('\n'):
-            line = line.strip()
-            if not line:
-                pdf.ln(3)
-                continue
-                
-            clean_line = line.replace('**', '')
-
-            if clean_line.upper() in ["THE TL;DR:", "FINANCIAL METRICS EXTRACTED:", "ACTION ITEMS:"]:
-                pdf.ln(5)
-                _safe_write(pdf, clean_line.upper(), is_header=True)
-            else:
-                _safe_write(pdf, clean_line, is_header=False)
-
-        try:
-            pdf.output(str(output_path))
-        except BaseException as e:
-            logger.error(f"Failed to save Summary PDF: {str(e)}")
 
     async def _compress_mp3(self, input_path: Path, output_path: Path, bitrate: str = "128k"):
         """Compress or copy MP3 to specified path."""
@@ -1805,14 +1687,19 @@ if __name__ == "__main__":
     host = "0.0.0.0" if is_cloud else "127.0.0.1"
 
     logger.info("=" * 60)
-    logger.info("  AI Transcriptor")
-    logger.info(f"  Mode: {'☁️ Cloud (Render.com)' if is_cloud else '🖥️ Desktop'}")
-    logger.info(f"  Binding: {host}:{port}")
-    logger.info(f"  Data Dir: {APP_DATA_DIR}")
-    logger.info(f"  FFmpeg: {FFMPEG_PATH or 'Not found'}")
-    logger.info(f"  SSL Cert: {'Yes' if cert_path.exists() else 'No'}")
-    logger.info(f"  API Keys: {len(settings_manager.get_all_keys())}")
-    logger.info("=" * 60)
+
+    # ─── Fresh State Initialization ───
+    # Clear temp files on startup so it feels like a "new app" as requested
+    import shutil
+    for d in [TEMP_DIR, MP3_DIR]:
+        if d.exists():
+            try:
+                for item in d.iterdir():
+                    if item.is_file(): item.unlink()
+                    elif item.is_dir(): shutil.rmtree(item)
+                logger.debug(f"State Cleaned: {d.name} reset to fresh.")
+            except Exception as e:
+                logger.debug(f"Startup cleanup minor fail: {e}")
 
     if is_cloud:
         # Cloud mode: just run uvicorn, no browser/pywebview
@@ -1821,16 +1708,17 @@ if __name__ == "__main__":
         # Desktop mode: try pywebview first, fallback to browser
         try:
             import webview
+            
+            # Start Uvicorn in background thread for Desktop mode
             server_thread = threading.Thread(
                 target=uvicorn.run, args=(app,),
                 kwargs={"host": host, "port": port, "log_level": "warning"},
                 daemon=True
             )
             server_thread.start()
-            time.sleep(1)
-            icon_path = str(BASE_DIR / "static" / "logo.png")
+            time.sleep(1.5)
             
-            import sys
+            icon_path = str(BASE_DIR / "static" / "logo.png")
             if sys.platform == "darwin":
                 try:
                     from AppKit import NSApplication, NSImage
