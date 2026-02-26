@@ -700,26 +700,39 @@ class TranscriptionEngine:
             logger.error(f"Failed to generate metadata keywords: {e}")
             return ""
 
-    def smart_format_chunk_sync(self, text: str, job_id: str, company_name: str, context_keywords: str, all_keys: list) -> str:
-        """Intelligently identify speakers and format dialogue."""
+    def smart_format_chunk_sync(self, segments_data: list, job_id: str, company_name: str, context_keywords: str, all_keys: list) -> str:
+        """Intelligently identify speakers and format dialogue without dropping a single word."""
         import httpx
+        import json
+        
+        if not segments_data:
+            return ""
+            
+        # Build raw text prompt
+        raw_text_to_process = ""
+        for s in segments_data:
+            raw_text_to_process += f"[ID: {s['id']}] {{time: {s['time_str']}}} {s['text']}\n"
+            
         system_prompt = (
-            f"You are an elite transcription editor for the '{company_name}' meeting. "
-            "You are given a raw transcript segment. Some lines contain {time: [MM:SS]} tags.\n"
-            "Your task is to intelligently identify the actual Speaker names based on context, flow, and provided keywords.\n"
-            "CRITICAL RULES: \n"
-            "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their specific predicted name (e.g. '[SPEAKER] Tim Cook'). DO NOT just write 'Speaker 1', intelligently deduce who they are!\n"
-            "2. On the immediate next line, output EXACTLY '[TIME]' followed by the timestamp of their first spoken sentence in this segment (e.g. '[TIME] [23:04]'). \n"
-            "3. Output THEIR EXACT SPOKEN TEXT on the following lines. DO NOT summarize. DO NOT shrink. Remove the {time:} tags from the spoken sentences themselves cleanly.\n"
-            "4. FATAL RULE: You MUST output EVERY SINGLE WORD from the raw transcript. Do not invent dialogue. Return 100% of the original text word-for-word.\n"
-            "5. The raw transcript may NOT have tags. Deduce when a new person starts speaking. DO NOT append 'Segment' lines anywhere."
+            f"You are an elite transcription editor for the '{company_name}' meeting.\n"
+            "You are given a raw transcript segment with [ID: XX] tags.\n"
+            "Your task is to identify the precise speaker for each segment based on context, flow, and provided keywords.\n"
+            "CRITICAL RULES:\n"
+            "1. You MUST return your response ONLY as a JSON object with a single key 'speaker_changes'.\n"
+            "2. 'speaker_changes' must be a list of objects containing 'id' (the integer ID where a NEW speaker begins) and 'speaker' (their deduced true name).\n"
+            "3. If the speaker does not change between consecutive IDs, do NOT add a new entry for every ID. Only add an entry when the speaker visibly CHANGES.\n"
+            "4. NEVER invent or write actual dialogue. Just map the changes.\n"
+            "5. Example output:\n"
+            '{"speaker_changes": [{"id": 0, "speaker": "Host"}, {"id": 12, "speaker": "CEO Name"}]}'
         )
-        user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
+        user_prompt = f"Key Executives & Context: {context_keywords}\n\nTranscript Segment:\n{raw_text_to_process}"
         
         attempt = 0
-        while attempt < 100: # Spray across keys up to 100 actual API attempts
+        speaker_map = {}
+        
+        while attempt < 100:
             if job_id in self.cancelled_jobs:
-                return text
+                return raw_text_to_process
                 
             api_key = self._get_next_key(all_keys)
             if not api_key:
@@ -732,11 +745,12 @@ class TranscriptionEngine:
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json={
-                        "model": "llama-3.3-70b-versatile", # Max Intelligence for Speaker Matching
+                        "model": "llama-3.3-70b-versatile",
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
                         ],
+                        "response_format": {"type": "json_object"},
                         "temperature": 0.05,
                         "max_tokens": 8000
                     },
@@ -756,20 +770,49 @@ class TranscriptionEngine:
                             if match: wait_time = float(match.group(1))
                         except: pass
                     
-                    
                     self._report_key_cooldown(api_key, wait_time)
                     import random
                     time.sleep(random.uniform(0.5, 1.5))
-                    attempt += 1  # Only burn an attempt on actual API hits
+                    attempt += 1  
                     continue
                 if response.status_code == 200:
-                    return response.json()["choices"][0]["message"]["content"].strip()
+                    raw_json = response.json()["choices"][0]["message"]["content"].strip()
+                    try:
+                        parsed = json.loads(raw_json)
+                        changes = parsed.get("speaker_changes", [])
+                        for change in changes:
+                            speaker_map[int(change["id"])] = change["speaker"]
+                        break
+                    except Exception as e:
+                        logger.debug(f"JSON Parse failed, retrying: {e}")
+                        attempt += 1
+                        continue
             except Exception as e:
                 attempt += 1
                 if attempt % 10 == 0:
                     logger.debug(f"Smart format waiting/hopping... (attempt {attempt}): {e}")
                 time.sleep(2)
-        return text
+        
+        # Assemble perfectly untouched text
+        final_text = ""
+        current_speaker = "Unknown Speaker"
+        
+        for s in segments_data:
+            sid = s["id"]
+            
+            # Start of chunk fallback to trigger
+            if sid == 0 and sid not in speaker_map:
+                speaker_map[sid] = current_speaker
+                
+            if sid in speaker_map:
+                current_speaker = speaker_map[sid]
+                final_text += f"\n\n[SPEAKER] {current_speaker}\n[TIME] {s['time_str']}\n"
+                
+            final_text += f"{s['text']} "
+            
+        # Clean up
+        final_text = final_text.replace("\n ", "\n").strip()
+        return final_text
 
     def transcribe_chunk(self, chunk_path: Path, job_id: str, all_keys: list, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
         """Transcribe a single audio chunk using Groq API."""
@@ -991,27 +1034,32 @@ class TranscriptionEngine:
                 
             result = self.transcribe_chunk(chunk_path, job_id, all_keys, model, keywords)
             
-            # SMART TIMESTAMP CALCULATION & INJECTION
+            # SMART TIMESTAMP CALCULATION & DIARIZATION INJECTION
             chunk_offset_seconds = idx * chunk_minutes * 60
-            raw_text_to_process = ""
+            segments_data = []
+            
             if "segments" in result and result["segments"]:
-                timestamped_text = ""
-                for segment in result["segments"]:
+                for s_idx, segment in enumerate(result["segments"]):
                     if "text" in segment and segment["text"].strip():
                         start_sec = segment["start"] + chunk_offset_seconds
                         h = int(start_sec // 3600)
                         m = int((start_sec % 3600) // 60)
                         s = int(start_sec % 60)
                         time_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
-                        timestamped_text += f"{{time: {time_str}}} {segment['text'].strip()}\n"
-                raw_text_to_process = timestamped_text
-            else:
-                raw_text_to_process = result.get("text", "")
+                        
+                        segments_data.append({
+                            "id": s_idx,
+                            "time_str": time_str,
+                            "text": segment["text"].strip()
+                        })
             
-            # SMART DIARIZATION PASS
-            if raw_text_to_process and not result.get("error"):
-                formatted_text = self.smart_format_chunk_sync(raw_text_to_process, job_id, company_name, keywords, all_keys)
+            # SMART DIARIZATION PASS (Zero-Loss Map System)
+            if segments_data and not result.get("error"):
+                formatted_text = self.smart_format_chunk_sync(segments_data, job_id, company_name, keywords, all_keys)
                 result["text"] = formatted_text
+            elif result.get("text") and not result.get("error"):
+                # Safety fallback
+                pass
                 
             return idx, result
 
