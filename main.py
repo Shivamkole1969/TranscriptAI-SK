@@ -267,20 +267,33 @@ ws_manager = ConnectionManager()
 # ─── Groq Transcription Engine ───────────────────────────────────────────────
 class TranscriptionEngine:
     def __init__(self):
-        self.key_usage = defaultdict(lambda: {"calls": 0, "last_reset": time.time()})
+        self.key_usage = defaultdict(lambda: {"calls": 0, "last_reset": time.time(), "cooldown_until": 0})
         self.key_lock = threading.Lock()
         self.active_jobs: Dict[str, dict] = {}
         self.cancelled_jobs = set()
 
+    def _report_key_cooldown(self, key: str, wait_time: float):
+        """Marks a key as globally exhausted for a specific duration across all threads."""
+        with self.key_lock:
+            self.key_usage[key]["cooldown_until"] = time.time() + wait_time
+
     def _get_next_key(self, keys: list) -> Optional[str]:
-        """Round-robin key selection with rate limit awareness."""
+        """Round-robin key selection with strict global rate limit awareness."""
         if not keys:
             return None
         with self.key_lock:
             now = time.time()
             best_key = None
             min_calls = float('inf')
-            for key in keys:
+            
+            # Filter natively available keys
+            available_keys = [k for k in keys if now >= self.key_usage[k].get("cooldown_until", 0)]
+            
+            # If all APIs are globally hard-banned, return the one closest to waking up so the thread can micro-sleep
+            if not available_keys:
+                return min(keys, key=lambda k: self.key_usage[k].get("cooldown_until", 0))
+
+            for key in available_keys:
                 usage = self.key_usage[key]
                 if now - usage["last_reset"] > 60:
                     usage["calls"] = 0
@@ -711,8 +724,11 @@ class TranscriptionEngine:
                             match = re.search(r'try again in (\d+\.?\d*)s', msg)
                             if match: wait_time = float(match.group(1))
                         except: pass
+                    
+                    self._report_key_cooldown(api_key, wait_time)
                     import random
-                    time.sleep(wait_time + random.uniform(0.5, 2.0))
+                    # Instantly hop to next alive key instead of freezing the master thread
+                    time.sleep(random.uniform(0.5, 1.5))
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
@@ -731,6 +747,14 @@ class TranscriptionEngine:
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
+                continue
+            
+            # Global Cooldown Assessment: Check if this key is universally locked
+            key_cooldown = self.key_usage[api_key].get("cooldown_until", 0)
+            now = time.time()
+            if key_cooldown > now:
+                # All master keys are globally down. Micro-sleep dynamically and loop instantly to catch the first key that re-opens
+                time.sleep(min(key_cooldown - now, 2.0))
                 continue
             
             try:
@@ -782,11 +806,12 @@ class TranscriptionEngine:
                             except: pass
                             
                         if attempt % 15 == 0:
-                            logger.info(f"Chunk rate-limited. Waiting {wait_time:.1f}s for key window... (Attempt {attempt}/{max_retries})")
+                            logger.info(f"Chunk rate-limited. Global {wait_time:.1f}s ban on key... (Attempt {attempt}/{max_retries})")
                         
+                        self._report_key_cooldown(api_key, wait_time)
                         import random
-                        # Must respect the actual cooldown length and stagger wakes to prevent synchronous DDoS!
-                        time.sleep(wait_time + random.uniform(0.5, 4.0))
+                        # Global key banned! Instantly release this thread with a micro stagger to query the NEXT available key
+                        time.sleep(random.uniform(0.5, 2.0))
                         continue
                     
                     response.raise_for_status()
@@ -849,7 +874,9 @@ class TranscriptionEngine:
 
         model = settings_manager.settings.get("default_model", "whisper-large-v3")
         chunk_minutes = settings_manager.settings.get("chunk_duration_minutes", 10)
-        max_workers = min(settings_manager.settings.get("max_parallel_workers", 20), len(all_keys) * 3)
+        
+        # Absolute 1-to-1 matching: Prevent 20 workers from brutally hitting 8 keys concurrently
+        max_workers = len(all_keys)
 
         # Fetch metadata keywords
         keywords = ""
