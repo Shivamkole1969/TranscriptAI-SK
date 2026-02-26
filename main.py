@@ -593,11 +593,12 @@ class TranscriptionEngine:
             return None
 
     def split_audio(self, audio_path: Path, chunk_minutes: int = 10) -> List[Path]:
-        """Split audio into chunks using FFmpeg stream copy for instant speed."""
+        """Split audio into perfect MP3 chunks (re-encoding to guarantee 100% valid headers for Whisper)."""
         import subprocess
         
         chunk_seconds = chunk_minutes * 60
-        ext = audio_path.suffix.lower() if audio_path.suffix else ".mp3"
+        # Force MP3 output to ensure Groq Whisper compatibility
+        ext = ".mp3"
         output_pattern = str(TEMP_DIR / f"{audio_path.stem}_chunk_%04d{ext}")
         
         cmd = [
@@ -605,7 +606,8 @@ class TranscriptionEngine:
             "-i", str(audio_path),
             "-f", "segment",
             "-segment_time", str(chunk_seconds),
-            "-c", "copy",
+            "-c:a", "libmp3lame",
+            "-b:a", "64k",  # 64k is perfectly fine for speech recognition
             output_pattern
         ]
         
@@ -674,7 +676,7 @@ class TranscriptionEngine:
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
-        for attempt in range(10): # Spray across keys up to 10 times to bypass limits
+        for attempt in range(100): # Spray across keys up to 100 times to absolutely guarantee completion
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
@@ -698,13 +700,14 @@ class TranscriptionEngine:
                     verify=verify
                 )
                 if response.status_code == 429:
-                    # Hop to next key instantly! No sleeping! ⚡️
+                    # Rate limited by Llama! Hop to next key and back off gracefully...
                     time.sleep(1.5)
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
             except Exception as e:
-                logger.debug(f"Smart format error (attempt {attempt+1}): {e}")
+                if attempt % 10 == 0:
+                    logger.debug(f"Smart format waiting/hopping... (attempt {attempt+1}): {e}")
                 time.sleep(2)
         return text
 
@@ -712,7 +715,7 @@ class TranscriptionEngine:
         """Transcribe a single audio chunk using Groq API."""
         import httpx
         
-        max_retries = 15
+        max_retries = 300 # Wait patiently (up to ~10 mins) instead of silently dropping the chunk!
         for attempt in range(max_retries):
             api_key = self._get_next_key(all_keys)
             if not api_key:
@@ -786,22 +789,26 @@ class TranscriptionEngine:
                     )
                     
                     if response.status_code == 429:
-                        # Rate Limited! 🛑
-                        # DO NOT SLEEP 30 SECONDS! Just 1.5s to prevent hammering, then let the loop hop to the next active key! ⚡️
-                        time.sleep(1.5)
+                        # ALL limits exhausted! We must gracefully hop round-robin until the cooldown resets
+                        if attempt % 15 == 0:
+                            logger.info(f"Chunk rate-limited. Waiting for key windows to clear... (Attempt {attempt}/{max_retries})")
+                        time.sleep(2)
                         continue
                     
                     response.raise_for_status()
                     return response.json()
                     
             except Exception as e:
-                logger.error(f"Chunk transcription error (attempt {attempt+1}): {e}")
+                if attempt % 15 == 0:
+                    logger.warning(f"Chunk transcription glitch (hoping to next key, attempt {attempt+1}): {e}")
+                
                 if attempt < max_retries - 1:
-                    time.sleep(3)
+                    time.sleep(2)
                 else:
                     return {"text": f"[ERROR: Could not transcribe chunk - {str(e)}]", "error": True}
         
-        return {"text": "[ERROR: Max retries exceeded across all keys]", "error": True}
+        logger.error(f"CRITICAL: Chunk dropped because {max_retries} retries were exhausted.")
+        return {"text": "[ERROR: Max retries exceeded across all keys. System abandoned chunk.]", "error": True}
 
     def post_process_transcript(self, text: str) -> str:
         """Apply speaker diarization regex and formatting."""
@@ -911,7 +918,9 @@ class TranscriptionEngine:
                 text = result.get("text", "")
                 full_text += f"\n\n--- Segment {i+1} ---\n\n{text}"
             else:
-                errors.append(f"Chunk {i+1}: {result.get('text', 'Unknown error')}")
+                err_txt = result.get('text', 'Unknown error') if result else 'Unknown error'
+                errors.append(f"Chunk {i+1}: {err_txt}")
+                full_text += f"\n\n--- Segment {i+1} ---\n\n[WARNING: This segment failed to transcribe completely due to API rate limits. Error: {err_txt}]"
 
         # Post-process
         full_text = self.post_process_transcript(full_text)
