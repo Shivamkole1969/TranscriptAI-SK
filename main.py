@@ -1021,30 +1021,44 @@ class TranscriptionEngine:
             if not line:
                 pdf.ln(3)
                 continue
-            if re.match(r'Speaker\s*\d+\s*:', line):
+                
+            clean_line = line.replace('**', '')
+            is_speaker = False
+            
+            # Smart Regex: Matches "Speaker 1:", "Tim Cook:", "John Doe - CEO:" 
+            if re.match(r'^[A-Z][\w\s\.\-]{0,40}:', clean_line) or re.match(r'Speaker\s*\d+\s*:', clean_line, flags=re.IGNORECASE):
+                is_speaker = True
+                
+            if is_speaker:
                 pdf.set_font('Helvetica', 'B', 10)
-                pdf.multi_cell(0, 5, line.encode('latin-1', 'replace').decode('latin-1'))
+                pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
                 pdf.set_font('Helvetica', '', 10)
             elif line.startswith('---'):
                 pdf.set_font('Helvetica', 'I', 9)
                 pdf.cell(0, 5, line, ln=True)
                 pdf.set_font('Helvetica', '', 10)
             else:
-                pdf.multi_cell(0, 5, line.encode('latin-1', 'replace').decode('latin-1'))
+                pdf.multi_cell(0, 5, clean_line.encode('latin-1', 'replace').decode('latin-1'))
 
         pdf.output(str(output_path))
 
     async def _compress_mp3(self, input_path: Path, output_path: Path, bitrate: str = "128k"):
-        """Compress MP3 to specified bitrate."""
-        ffmpeg = FFMPEG_PATH or "ffmpeg"
-        cmd = [ffmpeg, "-i", str(input_path), "-codec:a", "libmp3lame", "-b:a", bitrate, "-y", str(output_path)]
+        """Compress or copy MP3 to specified path."""
         try:
+            if input_path.suffix.lower() == '.mp3':
+                import shutil
+                shutil.copy2(str(input_path), str(output_path))
+                return
+
+            ffmpeg = FFMPEG_PATH or "ffmpeg"
+            cmd = [ffmpeg, "-i", str(input_path), "-codec:a", "libmp3lame", "-b:a", bitrate, "-y", str(output_path)]
             process = await asyncio.create_subprocess_exec(
-                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
             )
             await process.communicate()
         except Exception as e:
             logger.error(f"MP3 compression error: {e}")
+            import shutil
             shutil.copy2(str(input_path), str(output_path))
 
 engine = TranscriptionEngine()
