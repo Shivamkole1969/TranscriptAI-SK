@@ -40,9 +40,9 @@
             this.size = Math.random() * 2.5 + 0.5;
             this.speedX = (Math.random() - 0.5) * 0.3;
             this.speedY = (Math.random() - 0.5) * 0.2 - 0.1;
-            this.opacity = Math.random() * 0.6 + 0.1;
-            this.opacityDir = Math.random() * 0.008 + 0.002;
-            this.hue = 210 + Math.random() * 40; // Blue-purple range
+            this.opacity = Math.random() * 0.4 + 0.1;
+            this.opacityDir = Math.random() * 0.005 + 0.001;
+            this.hue = 200 + Math.random() * 60; // Soothing cyan to purple range
             this.twinkleSpeed = Math.random() * 0.02 + 0.01;
             this.twinkleOffset = Math.random() * Math.PI * 2;
         }
@@ -79,11 +79,11 @@
 
     // ─── Wave Configuration ─────────────────────────────────────
     const waves = [
-        { amplitude: 25, frequency: 0.008, speed: 0.015, yOffset: 0.75, color: [59, 130, 246], opacity: 0.06 },
-        { amplitude: 20, frequency: 0.012, speed: 0.02, yOffset: 0.78, color: [99, 102, 241], opacity: 0.05 },
-        { amplitude: 30, frequency: 0.006, speed: 0.01, yOffset: 0.82, color: [139, 92, 246], opacity: 0.04 },
-        { amplitude: 15, frequency: 0.015, speed: 0.025, yOffset: 0.7, color: [59, 130, 246], opacity: 0.03 },
-        { amplitude: 18, frequency: 0.01, speed: 0.018, yOffset: 0.65, color: [6, 182, 212], opacity: 0.025 },
+        { amplitude: 35, frequency: 0.005, speed: 0.008, yOffset: 0.70, color: [59, 130, 246], opacity: 0.12 },
+        { amplitude: 25, frequency: 0.008, speed: 0.012, yOffset: 0.75, color: [99, 102, 241], opacity: 0.09 },
+        { amplitude: 40, frequency: 0.004, speed: 0.006, yOffset: 0.80, color: [139, 92, 246], opacity: 0.07 },
+        { amplitude: 20, frequency: 0.010, speed: 0.015, yOffset: 0.65, color: [59, 130, 246], opacity: 0.06 },
+        { amplitude: 22, frequency: 0.007, speed: 0.010, yOffset: 0.60, color: [6, 182, 212], opacity: 0.05 },
     ];
 
     // ─── Mesh Grid (3D depth illusion) ──────────────────────────

@@ -9,12 +9,12 @@
 /* ── CSS Variables ─────────────────────────────────────────────── */
 :root {
     /* Core palette */
-    --bg-primary: #0a0e1a;
-    --bg-secondary: #0f1629;
-    --bg-tertiary: #141b2d;
-    --bg-card: #1a2235;
-    --bg-card-hover: #1e2840;
-    --bg-elevated: #202940;
+    --bg-primary: #060b13;
+    --bg-secondary: #0a101c;
+    --bg-tertiary: #101625;
+    --bg-card: #151c2d;
+    --bg-card-hover: #192135;
+    --bg-elevated: #1a233b;
 
     /* Accent colors */
     --accent-primary: #3b82f6;
@@ -785,8 +785,8 @@ body::before {
 /* ── Transcription Section ─────────────────────────────────────── */
 .transcription-layout {
     display: grid;
-    grid-template-columns: 1fr 440px;
-    gap: 32px;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 40px;
     align-items: start;
 }
 
@@ -1218,10 +1218,11 @@ body::before {
 }
 
 .history-table td {
-    padding: 12px 16px;
+    padding: 18px 16px;
     font-size: 13px;
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
 }
 
 .history-table tbody tr {
@@ -1475,6 +1476,7 @@ body::before {
 @media (max-width: 1024px) {
     .transcription-layout {
         grid-template-columns: 1fr;
+        gap: 24px;
     }
 
     .api-section-grid {

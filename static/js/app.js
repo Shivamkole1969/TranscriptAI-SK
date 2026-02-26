@@ -698,11 +698,12 @@ function maskKey(key) {
 }
 
 function updateKeyCount() {
+    const total = (AppState.settings.paid_api_keys?.length || 0) + (AppState.settings.free_api_keys?.length || 0);
     const el = document.getElementById('keyCount');
-    if (el) {
-        const total = (AppState.settings.paid_api_keys?.length || 0) + (AppState.settings.free_api_keys?.length || 0);
-        el.textContent = `🔑 ${total} key${total !== 1 ? 's' : ''}`;
-    }
+    if (el) el.textContent = `🔑 ${total} key${total !== 1 ? 's' : ''}`;
+
+    const dashEl = document.getElementById('stat-keys');
+    if (dashEl) dashEl.textContent = total;
 }
 
 // ─── Settings ─────────────────────────────────────────────────────
