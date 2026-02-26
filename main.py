@@ -1162,13 +1162,18 @@ async def transcribe_url(request: Request):
     job_id = str(uuid.uuid4())[:8]
     
     async def run_job():
-        audio_path = await engine.download_audio(url, job_id)
-        if audio_path:
-            await engine.transcribe_full(audio_path, job_id, company_name)
-            try:
-                audio_path.unlink()
-            except Exception:
-                pass
+        try:
+            audio_path = await engine.download_audio(url, job_id)
+            if job_id in engine.cancelled_jobs:
+                return
+            if audio_path:
+                await engine.transcribe_full(audio_path, job_id, company_name)
+                try:
+                    audio_path.unlink()
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.error(f"Job {job_id} encountered unexpected error: {e}")
     
     asyncio.create_task(run_job())
     return {"job_id": job_id, "status": "started"}
@@ -1187,7 +1192,12 @@ async def transcribe_upload(
         f.write(content)
     
     async def run_job():
-        await engine.transcribe_full(file_path, job_id, company_name)
+        try:
+            if job_id in engine.cancelled_jobs:
+                return
+            await engine.transcribe_full(file_path, job_id, company_name)
+        except Exception as e:
+            logger.error(f"Upload Job {job_id} encountered unexpected error: {e}")
         try:
             file_path.unlink()
         except Exception:
