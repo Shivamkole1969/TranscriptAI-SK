@@ -700,7 +700,7 @@ class TranscriptionEngine:
             logger.error(f"Failed to generate metadata keywords: {e}")
             return ""
 
-    def smart_format_chunk_sync(self, text: str, company_name: str, context_keywords: str, all_keys: list) -> str:
+    def smart_format_chunk_sync(self, text: str, job_id: str, company_name: str, context_keywords: str, all_keys: list) -> str:
         """Intelligently identify speakers and format dialogue."""
         import httpx
         system_prompt = (
@@ -718,6 +718,9 @@ class TranscriptionEngine:
         
         attempt = 0
         while attempt < 100: # Spray across keys up to 100 actual API attempts
+            if job_id in self.cancelled_jobs:
+                return text
+                
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
@@ -768,13 +771,16 @@ class TranscriptionEngine:
                 time.sleep(2)
         return text
 
-    def transcribe_chunk(self, chunk_path: Path, all_keys: list, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
+    def transcribe_chunk(self, chunk_path: Path, job_id: str, all_keys: list, model: str = "whisper-large-v3", context_keywords: str = "") -> dict:
         """Transcribe a single audio chunk using Groq API."""
         import httpx
         
         max_retries = 300 # Wait patiently instead of silently dropping the chunk!
         attempt = 0
         while attempt < max_retries:
+            if job_id in self.cancelled_jobs:
+                return {"text": "[CANCELLED]", "error": True}
+                
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
@@ -784,8 +790,20 @@ class TranscriptionEngine:
             key_cooldown = self.key_usage[api_key].get("cooldown_until", 0)
             now = time.time()
             if key_cooldown > now:
-                # All master keys are globally down. Micro-sleep dynamically and loop instantly to catch the first key that re-opens
+                # All master keys are globally down. Check for cancel, micro-sleep dynamically and loop instantly to catch the first key that re-opens
+                if job_id in self.cancelled_jobs:
+                    return {"text": "[CANCELLED]", "error": True}
+                
                 time.sleep(min(key_cooldown - now, 2.0))
+                
+                if attempt % 15 == 0:
+                    try:
+                        loop = asyncio.get_event_loop()
+                        asyncio.run_coroutine_threadsafe(
+                            ws_manager.broadcast({"type": "log", "job_id": job_id, "message": f"♻️ Auto-Recovery: Keys exhausted. Retrying chunk with backup systems... ({attempt}/{max_retries})"}),
+                            loop
+                        )
+                    except: pass
                 continue
             
             try:
@@ -841,6 +859,10 @@ class TranscriptionEngine:
                         
                         self._report_key_cooldown(api_key, wait_time)
                         import random
+                        
+                        if job_id in self.cancelled_jobs:
+                            return {"text": "[CANCELLED]", "error": True}
+                            
                         time.sleep(random.uniform(0.5, 2.0))
                         attempt += 1
                         continue
@@ -853,8 +875,11 @@ class TranscriptionEngine:
                 if attempt % 15 == 0:
                     logger.warning(f"Chunk transcription glitch (hoping to next key, attempt {attempt}): {e}")
                 
+                if job_id in self.cancelled_jobs:
+                    return {"text": "[CANCELLED]", "error": True}
+                    
                 if attempt < max_retries:
-                    time.sleep(2)
+                    time.sleep(2.0)
                 else:
                     return {"text": f"[ERROR: Could not transcribe chunk - {str(e)}]", "error": True}
         
@@ -964,7 +989,7 @@ class TranscriptionEngine:
             if job_id in self.cancelled_jobs:
                 return idx, {"text": "[CANCELLED]", "error": True}
                 
-            result = self.transcribe_chunk(chunk_path, all_keys, model, keywords)
+            result = self.transcribe_chunk(chunk_path, job_id, all_keys, model, keywords)
             
             # SMART TIMESTAMP CALCULATION & INJECTION
             chunk_offset_seconds = idx * chunk_minutes * 60
@@ -985,7 +1010,7 @@ class TranscriptionEngine:
             
             # SMART DIARIZATION PASS
             if raw_text_to_process and not result.get("error"):
-                formatted_text = self.smart_format_chunk_sync(raw_text_to_process, company_name, keywords, all_keys)
+                formatted_text = self.smart_format_chunk_sync(raw_text_to_process, job_id, company_name, keywords, all_keys)
                 result["text"] = formatted_text
                 
             return idx, result

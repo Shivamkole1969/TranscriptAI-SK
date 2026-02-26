@@ -476,9 +476,16 @@
                             <span class="key-badge free">Free Tier</span>
                         </div>
                         <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px; line-height: 1.5;">
-                            Add multiple free Groq keys to increase parallel capacity. The app dynamically distributes
-                            load
-                            across all keys using round-robin. More keys = faster transcription!
+                            Add multiple free Groq keys to increase parallel capacity and activate the <strong
+                                style="color:var(--primary);">Smart Fallback System</strong>.
+                            The engine intelligently reserves <strong>25% of your free keys as dedicated
+                                backups</strong>.
+                            <br /><br />
+                            <em>Example:</em> If you add 8 keys, 2 are placed as backup. If you add 20 keys, 5 are
+                            placed as backup.
+                            If the primary pool gets rate-limited, the system auto-recovers using these pristine
+                            backups.
+                            <strong>Please add more than 8 API keys for smooth, error-free performance!</strong>
                         </p>
                         <ul class="key-list" id="freeKeysList">
                             <div class="empty-state">
