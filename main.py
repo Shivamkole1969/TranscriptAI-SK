@@ -860,7 +860,7 @@ class TranscriptionEngine:
                     
                     base_prompt = (
                         f"{keyword_injection}"
-                        "Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
+                        "Hello, welcome! This is a highly accurate, grammatically correct, and fully punctuated transcript of the professional financial presentation. Lakh, Crore, EBITDA, YoY, QoQ, PAT, Margins, Revenue."
                     )
                     
                     # Groq Whisper has a hard 896 character prompt limit
@@ -870,7 +870,8 @@ class TranscriptionEngine:
                         'model': model,
                         'language': 'en',
                         'response_format': 'verbose_json',
-                        'prompt': final_prompt
+                        'prompt': final_prompt,
+                        'temperature': '0'  # Forces strictly deterministic, fully accurate reading and heavily limits hallucination loops
                     }
                     
                     verify = str(cert_path) if cert_path.exists() else True
