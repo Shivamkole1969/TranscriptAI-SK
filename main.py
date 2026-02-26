@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AI Transcriptor by Shivam Kole
+AI Transcriptor
 ================================
 Enterprise-grade transcription engine with multi-API parallelism,
 speaker diarization, MP3 tools, and scheduling.
@@ -1600,7 +1600,7 @@ if __name__ == "__main__":
     host = "0.0.0.0" if is_cloud else "127.0.0.1"
 
     logger.info("=" * 60)
-    logger.info("  AI Transcriptor by Shivam Kole")
+    logger.info("  AI Transcriptor")
     logger.info(f"  Mode: {'☁️ Cloud (Render.com)' if is_cloud else '🖥️ Desktop'}")
     logger.info(f"  Binding: {host}:{port}")
     logger.info(f"  Data Dir: {APP_DATA_DIR}")
@@ -1636,7 +1636,7 @@ if __name__ == "__main__":
                 except Exception as e:
                     logger.debug(f"macOS dock icon set failed: {e}")
             
-            webview.create_window("AI Transcriptor by Shivam Kole", f"http://127.0.0.1:{port}", width=1400, height=900)
+            webview.create_window("AI Transcriptor", f"http://127.0.0.1:{port}", width=1400, height=900)
             webview.start(icon=icon_path)
         except ImportError:
             logger.info("pywebview not available, opening in browser...")
