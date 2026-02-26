@@ -6,11 +6,14 @@ from pathlib import Path
 # Setup paths
 src_dir = Path("/Users/shivam.kole/Downloads/Transcriptor SK")
 app_name = "AI Transcriptor.app"
-app_dir = Path("/Users/shivam.kole/Applications") / app_name
+app_dir = Path("/Applications") / app_name
+desktop_app_dir = Path("/Users/shivam.kole/Desktop") / app_name
 
 # Refresh if exists
 if app_dir.exists():
     shutil.rmtree(app_dir)
+if desktop_app_dir.exists():
+    shutil.rmtree(desktop_app_dir)
 
 # Create layout
 app_dir.mkdir(parents=True, exist_ok=True)
@@ -73,3 +76,7 @@ run_script.write_text(run_script_sh)
 os.chmod(run_script, run_script.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 print(f"✅ Mac App created successfully at: {app_dir}")
+
+# Mirror to Desktop for the easiest access
+shutil.copytree(app_dir, desktop_app_dir, dirs_exist_ok=True)
+print(f"🚀 Shortcut placed on your Desktop as well: {desktop_app_dir}")
