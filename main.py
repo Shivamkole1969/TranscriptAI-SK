@@ -1124,6 +1124,13 @@ class TranscriptionEngine:
         pdf_path = OUTPUT_DIR / f"{file_prefix}.pdf"
         self._generate_pdf(pdf_path, company_name, full_text, processing_time)
 
+        # Generate & Save AI Executive Summary
+        await ws_manager.broadcast({"type": "log", "job_id": job_id, "message": "🧠 Synthesizing AI Executive Summary & Financial Extraction Brief..."})
+        summary_text = await loop.run_in_executor(None, self._generate_executive_summary, full_text, company_name, job_id, all_keys)
+        summary_pdf_path = OUTPUT_DIR / f"{file_prefix}_Executive_Summary.pdf"
+        if summary_text:
+            self._generate_summary_pdf(summary_pdf_path, company_name, summary_text)
+
         # Compress MP3 to output
         compressed_path = MP3_DIR / f"{file_prefix}.mp3"
         await self._compress_mp3(audio_path, compressed_path)
@@ -1143,6 +1150,8 @@ class TranscriptionEngine:
         import shutil
         shutil.copy(txt_path, bundle_dir)
         shutil.copy(pdf_path, bundle_dir)
+        if summary_pdf_path.exists():
+            shutil.copy(summary_pdf_path, bundle_dir)
         shutil.copy(compressed_path, bundle_dir)
         if keywords_path:
             shutil.copy(keywords_path, bundle_dir)
@@ -1273,6 +1282,125 @@ class TranscriptionEngine:
             pdf.output(str(output_path))
         except BaseException as e:
             logger.error(f"Failed to save PDF: {str(e)}")
+
+    def _generate_executive_summary(self, full_text: str, company_name: str, job_id: str, all_keys: list) -> str:
+        """Generate a 1-page executive summary and financial metrics using LLM."""
+        import httpx
+        
+        # We use Mixtral because it supports 32k context size (up to ~25,000 words easily) which guarantees the 
+        # entirety of a 1.5 hr master transcript fits without slicing.
+        model_to_use = "mixtral-8x7b-32768"
+        
+        system_prompt = (
+            "You are an elite financial analyst and executive assistant.\n"
+            "Given the transcribed meeting/call below, generate a professional, highly concise 1-page Executive Brief.\n"
+            "You MUST structure your response ONLY using exactly these three headings:\n\n"
+            "THE TL;DR:\n"
+            "[Provide a 3-paragraph executive summary of the entire call]\n\n"
+            "FINANCIAL METRICS EXTRACTED:\n"
+            "[Bulleted list of all numbers, revenue, EBITDA, guidance, timelines, or percentages mentioned]\n\n"
+            "ACTION ITEMS:\n"
+            "[Key decisions or forward-looking statements made by the leadership]\n\n"
+            "If any section lacks information from the transcript, briefly state 'Not explicitly mentioned'. "
+            "Do not output markdown asterisks or bold tags, just use plain structural line spacing and clean bullet dots (-)."
+        )
+        
+        # safely slice text to fit ~120,000 chars which safely fits Mixtral limit
+        safe_text_for_prompt = full_text[:120000]
+        user_prompt = f"Transcript for {company_name}:\n\n{safe_text_for_prompt}"
+        
+        attempt = 0
+        while attempt < 15:
+            if job_id in self.cancelled_jobs:
+                return ""
+                
+            api_key = self._get_next_key(all_keys)
+            if not api_key:
+                time.sleep(1)
+                continue
+                
+            try:
+                verify = str(cert_path) if cert_path.exists() else True
+                response = httpx.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    json={
+                        "model": model_to_use,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 4000
+                    },
+                    timeout=180,
+                    verify=verify
+                )
+                
+                if response.status_code == 429:
+                    time.sleep(2)
+                    attempt += 1
+                    continue
+                    
+                if response.status_code == 200:
+                    return response.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                attempt += 1
+                time.sleep(2)
+                
+        return "Summary could not be generated due to API timeouts."
+
+    def _generate_summary_pdf(self, output_path: Path, company_name: str, summary_text: str):
+        """Generate a professional PDF for the Executive Summary."""
+        from fpdf import FPDF
+
+        class SummaryPDF(FPDF):
+            def header(self):
+                self.set_font('Helvetica', 'B', 16)
+                self.cell(0, 10, f'{company_name} - EXECUTIVE SUMMARY', ln=True, align='L')
+                self.set_font('Helvetica', '', 9)
+                self.cell(0, 6, f'Date: {datetime.now().strftime("%Y-%m-%d %H:%M")}', ln=True, align='R')
+                self.line(10, self.get_y(), 200, self.get_y())
+                self.ln(5)
+
+            def footer(self):
+                self.set_y(-15)
+                self.set_font('Helvetica', 'I', 8)
+                self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', align='C')
+
+        pdf = SummaryPDF()
+        pdf.alias_nb_pages()
+        pdf.add_page()
+
+        def _safe_write(pdf_obj, text_line, is_header=False):
+            safe_text = text_line.encode('latin-1', 'replace').decode('latin-1')
+            try:
+                if is_header:
+                    pdf_obj.set_font('Helvetica', 'B', 11)
+                else:
+                    pdf_obj.set_font('Helvetica', '', 11)
+                pdf_obj.multi_cell(0, 6, safe_text)
+            except:
+                pass
+
+        for line in summary_text.split('\n'):
+            line = line.strip()
+            if not line:
+                pdf.ln(3)
+                continue
+                
+            clean_line = line.replace('**', '')
+
+            if clean_line.upper() in ["THE TL;DR:", "FINANCIAL METRICS EXTRACTED:", "ACTION ITEMS:"]:
+                pdf.ln(5)
+                _safe_write(pdf, clean_line.upper(), is_header=True)
+            else:
+                _safe_write(pdf, clean_line, is_header=False)
+
+        try:
+            pdf.output(str(output_path))
+        except BaseException as e:
+            logger.error(f"Failed to save Summary PDF: {str(e)}")
 
     async def _compress_mp3(self, input_path: Path, output_path: Path, bitrate: str = "128k"):
         """Compress or copy MP3 to specified path."""
