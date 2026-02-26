@@ -705,19 +705,19 @@ class TranscriptionEngine:
         import httpx
         system_prompt = (
             f"You are an elite transcription editor for the '{company_name}' meeting. "
-            "You are given a raw transcript segment from Whisper.\n"
-            "Your task is to identify the actual Speaker names based on context and provided keywords.\n"
+            "You are given a raw transcript segment. Some lines contain {time: [MM:SS]} tags.\n"
+            "Your task is to intelligently identify the actual Speaker names based on context, flow, and provided keywords.\n"
             "CRITICAL RULES: \n"
-            "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their name (e.g. '[SPEAKER] Tim Cook'). \n"
-            "2. On the immediate next line, output '[TITLE]' followed by their Title/Company (e.g. '[TITLE] CEO | Apple'). If unclear, use '[TITLE] Speaker'.\n"
-            "3. Output THEIR EXACT SPOKEN TEXT on the following lines.\n"
-            "4. FATAL RULE: You MUST output EVERY SINGLE WORD from the raw transcript. DO NOT summarize. DO NOT skip sentences. DO NOT truncate. You must return 100% of the original text word-for-word, only injecting the [SPEAKER] and [TITLE] markers where the person changes.\n"
-            "5. The raw transcript may NOT have speaker tags. Deduce when a new person starts speaking based on context.\n"
-            "6. DO NOT add any extra commentary or introductory text."
+            "1. Whenever a speaker changes, output their name on a new line starting EXACTLY with '[SPEAKER]' followed by their specific predicted name (e.g. '[SPEAKER] Tim Cook'). DO NOT just write 'Speaker 1', intelligently deduce who they are!\n"
+            "2. On the immediate next line, output EXACTLY '[TIME]' followed by the timestamp of their first spoken sentence in this segment (e.g. '[TIME] [23:04]'). \n"
+            "3. Output THEIR EXACT SPOKEN TEXT on the following lines. DO NOT summarize. DO NOT shrink. Remove the {time:} tags from the spoken sentences themselves cleanly.\n"
+            "4. FATAL RULE: You MUST output EVERY SINGLE WORD from the raw transcript. Do not invent dialogue. Return 100% of the original text word-for-word.\n"
+            "5. The raw transcript may NOT have tags. Deduce when a new person starts speaking. DO NOT append 'Segment' lines anywhere."
         )
         user_prompt = f"Key Executives & Context: {context_keywords}\n\nRaw Transcript Segment:\n{text}"
         
-        for attempt in range(100): # Spray across keys up to 100 times to absolutely guarantee completion
+        attempt = 0
+        while attempt < 100: # Spray across keys up to 100 actual API attempts
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
@@ -753,16 +753,18 @@ class TranscriptionEngine:
                             if match: wait_time = float(match.group(1))
                         except: pass
                     
+                    
                     self._report_key_cooldown(api_key, wait_time)
                     import random
-                    # Instantly hop to next alive key instead of freezing the master thread
                     time.sleep(random.uniform(0.5, 1.5))
+                    attempt += 1  # Only burn an attempt on actual API hits
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
             except Exception as e:
+                attempt += 1
                 if attempt % 10 == 0:
-                    logger.debug(f"Smart format waiting/hopping... (attempt {attempt+1}): {e}")
+                    logger.debug(f"Smart format waiting/hopping... (attempt {attempt}): {e}")
                 time.sleep(2)
         return text
 
@@ -770,8 +772,9 @@ class TranscriptionEngine:
         """Transcribe a single audio chunk using Groq API."""
         import httpx
         
-        max_retries = 300 # Wait patiently (up to ~10 mins) instead of silently dropping the chunk!
-        for attempt in range(max_retries):
+        max_retries = 300 # Wait patiently instead of silently dropping the chunk!
+        attempt = 0
+        while attempt < max_retries:
             api_key = self._get_next_key(all_keys)
             if not api_key:
                 time.sleep(1)
@@ -838,18 +841,19 @@ class TranscriptionEngine:
                         
                         self._report_key_cooldown(api_key, wait_time)
                         import random
-                        # Global key banned! Instantly release this thread with a micro stagger to query the NEXT available key
                         time.sleep(random.uniform(0.5, 2.0))
+                        attempt += 1
                         continue
                     
                     response.raise_for_status()
                     return response.json()
                     
             except Exception as e:
+                attempt += 1
                 if attempt % 15 == 0:
-                    logger.warning(f"Chunk transcription glitch (hoping to next key, attempt {attempt+1}): {e}")
+                    logger.warning(f"Chunk transcription glitch (hoping to next key, attempt {attempt}): {e}")
                 
-                if attempt < max_retries - 1:
+                if attempt < max_retries:
                     time.sleep(2)
                 else:
                     return {"text": f"[ERROR: Could not transcribe chunk - {str(e)}]", "error": True}
@@ -962,9 +966,26 @@ class TranscriptionEngine:
                 
             result = self.transcribe_chunk(chunk_path, all_keys, model, keywords)
             
-            # SMART DIARIZATION PASS (Intelligently maps names to generic speaker tags)
-            if result.get("text") and not result.get("error"):
-                formatted_text = self.smart_format_chunk_sync(result["text"], company_name, keywords, all_keys)
+            # SMART TIMESTAMP CALCULATION & INJECTION
+            chunk_offset_seconds = idx * chunk_minutes * 60
+            raw_text_to_process = ""
+            if "segments" in result and result["segments"]:
+                timestamped_text = ""
+                for segment in result["segments"]:
+                    if "text" in segment and segment["text"].strip():
+                        start_sec = segment["start"] + chunk_offset_seconds
+                        h = int(start_sec // 3600)
+                        m = int((start_sec % 3600) // 60)
+                        s = int(start_sec % 60)
+                        time_str = f"[{h:02d}:{m:02d}:{s:02d}]" if h > 0 else f"[{m:02d}:{s:02d}]"
+                        timestamped_text += f"{{time: {time_str}}} {segment['text'].strip()}\n"
+                raw_text_to_process = timestamped_text
+            else:
+                raw_text_to_process = result.get("text", "")
+            
+            # SMART DIARIZATION PASS
+            if raw_text_to_process and not result.get("error"):
+                formatted_text = self.smart_format_chunk_sync(raw_text_to_process, company_name, keywords, all_keys)
                 result["text"] = formatted_text
                 
             return idx, result
@@ -998,11 +1019,11 @@ class TranscriptionEngine:
         for i, result in enumerate(results):
             if result and not result.get("error"):
                 text = result.get("text", "")
-                full_text += f"\n\n--- Segment {i+1} ---\n\n{text}"
+                full_text += f"\n\n{text}"
             else:
                 err_txt = result.get('text', 'Unknown error') if result else 'Unknown error'
                 errors.append(f"Chunk {i+1}: {err_txt}")
-                full_text += f"\n\n--- Segment {i+1} ---\n\n[WARNING: This segment failed to transcribe completely due to API rate limits. Error: {err_txt}]"
+                full_text += f"\n\n[WARNING: A section failed to transcribe. Error: {err_txt}]"
 
         # Post-process
         full_text = self.post_process_transcript(full_text, keywords)
@@ -1016,8 +1037,8 @@ class TranscriptionEngine:
         safe_name = re.sub(r'[^\w\s-]', '', company_name).strip().replace(' ', '_')
         file_prefix = f"{safe_name}_{timestamp}"
         
-        # Save TXT (Clean tags for txt reading)
-        clean_txt = full_text.replace('[SPEAKER]', '').replace('[TITLE]', '')
+        # Save TXT (Format naturally)
+        clean_txt = full_text.replace('[SPEAKER]', '').replace('[TIME]', '')
         txt_path = OUTPUT_DIR / f"{file_prefix}.txt"
         with open(txt_path, 'w', encoding='utf-8') as f:
             f.write(f"{company_name} - TRANSCRIPT\n")
@@ -1150,12 +1171,17 @@ class TranscriptionEngine:
                 speaker_name = clean_line.replace('[SPEAKER]', '').strip()
                 pdf.ln(5)
                 pdf.set_font('Helvetica', 'B', 10)
+                pdf.set_text_color(0, 0, 0)
                 pdf.cell(0, 5, speaker_name, ln=True)
-            elif clean_line.startswith('[TITLE]'):
-                title = clean_line.replace('[TITLE]', '').strip()
-                pdf.set_font('Helvetica', 'I', 9)
-                pdf.cell(0, 5, title, ln=True)
+            elif clean_line.startswith('[TIME]'):
+                time_str = clean_line.replace('[TIME]', '').strip()
+                pdf.set_font('Helvetica', 'I', 8)
+                pdf.set_text_color(120, 120, 120)  # Professional grey timestamp
+                pdf.cell(0, 4, time_str, ln=True)
                 pdf.set_font('Helvetica', '', 10)
+                pdf.set_text_color(0, 0, 0)
+            elif clean_line.startswith('[TITLE]'):
+                pass # Deprecated gracefully
             elif clean_line.startswith('---'):
                 pdf.set_font('Helvetica', 'I', 9)
                 pdf.cell(0, 5, clean_line, ln=True)
