@@ -739,24 +739,37 @@ class TranscriptionEngine:
                 time.sleep(1)
                 continue
                 
+            # 3-Tier Fallback Architecture (Rollback system)
+            if attempt < 25:
+                current_model = "llama-3.3-70b-versatile"
+            elif attempt < 50:
+                current_model = "mixtral-8x7b-32768"
+            elif attempt < 75:
+                current_model = "llama-3.1-8b-instant"
+            else:
+                # 3rd Fallback: If all 75 API permutations fail, gracefully return original text to never drop a chunk!
+                logger.warning(f"All 3 AI Diarization fallbacks exhausted. Rolling back to original untouched whisper text.")
+                break
+                
             try:
                 verify = str(cert_path) if cert_path.exists() else True
                 response = httpx.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {api_key}"},
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": current_model,
                         "messages": [
                             {"role": "system", "content": system_prompt},
                             {"role": "user", "content": user_prompt}
                         ],
                         "response_format": {"type": "json_object"},
                         "temperature": 0.05,
-                        "max_tokens": 8000
+                        "max_tokens": 1500  # lowered to completely dodge 8192 token hard-cap 400 Bad Request Context limitations
                     },
                     timeout=180,
                     verify=verify
                 )
+                
                 if response.status_code == 429:
                     wait_time = 1.5
                     retry_after = response.headers.get("retry-after")
@@ -775,7 +788,8 @@ class TranscriptionEngine:
                     time.sleep(random.uniform(0.5, 1.5))
                     attempt += 1  
                     continue
-                if response.status_code == 200:
+                    
+                elif response.status_code == 200:
                     raw_json = response.json()["choices"][0]["message"]["content"].strip()
                     try:
                         parsed = json.loads(raw_json)
@@ -786,7 +800,15 @@ class TranscriptionEngine:
                     except Exception as e:
                         logger.debug(f"JSON Parse failed, retrying: {e}")
                         attempt += 1
+                        time.sleep(1)
                         continue
+                else:
+                    # Traps 400 Bad Request, 500 Server Error, etc.
+                    logger.debug(f"Groq formatting error {response.status_code}: {response.text}")
+                    attempt += 1
+                    time.sleep(1)
+                    continue
+                    
             except Exception as e:
                 attempt += 1
                 if attempt % 10 == 0:
