@@ -711,7 +711,8 @@ class TranscriptionEngine:
                             match = re.search(r'try again in (\d+\.?\d*)s', msg)
                             if match: wait_time = float(match.group(1))
                         except: pass
-                    time.sleep(min(wait_time, 5.0))
+                    import random
+                    time.sleep(wait_time + random.uniform(0.5, 2.0))
                     continue
                 if response.status_code == 200:
                     return response.json()["choices"][0]["message"]["content"].strip()
@@ -783,8 +784,9 @@ class TranscriptionEngine:
                         if attempt % 15 == 0:
                             logger.info(f"Chunk rate-limited. Waiting {wait_time:.1f}s for key window... (Attempt {attempt}/{max_retries})")
                         
-                        # Wait based on API response but cap at 10s so it can actively hop to a fresher key
-                        time.sleep(min(wait_time, 10.0))
+                        import random
+                        # Must respect the actual cooldown length and stagger wakes to prevent synchronous DDoS!
+                        time.sleep(wait_time + random.uniform(0.5, 4.0))
                         continue
                     
                     response.raise_for_status()
